@@ -952,14 +952,10 @@
   document.getElementById('closeDrawer').onclick = () => drawerEl.classList.remove('open');
   document.getElementById('downloadTiles').onclick = downloadOfflineTiles;
 
-  document.getElementById('markHereBtn').onclick = async () => {
-    const btn = document.getElementById('markHereBtn');
-    btn.disabled = true; btn.textContent = 'GPS wird geortet…';
-    try{
-      const pos = await getCurrentPositionAsync();
-      openRecordForm({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
-    }catch(e){ toast('GPS-Fehler: ' + e.message); }
-    btn.disabled = false; btn.textContent = '📍 Hier markieren';
+  document.getElementById('markHereBtn').onclick = () => {
+    const fallback = window.__lastPos
+      || (map ? { lat: map.getCenter().lat, lng: map.getCenter().lng } : { lat: route.waypoints[0].lat, lng: route.waypoints[0].lng });
+    openRecordForm({ lat: fallback.lat, lng: fallback.lng, pending: true });
   };
 
   document.getElementById('finishRecording').onclick = () => {
@@ -1063,13 +1059,16 @@
       name:'', type:'checkpoint', instruction:'', hypershellAction:'', funfact:'',
       radius: defaultRadius, lat: posData.lat, lng: posData.lng
     };
-    const accuracyText = posData.accuracy ? Math.round(posData.accuracy)+'m Genauigkeit' : '';
+    const statusText = posData.pending ? '📡 GPS wird ermittelt … du kannst schon lostippen'
+      : posData.error ? '⚠️ Keine GPS-Position gefunden — bitte Koordinaten prüfen/eingeben'
+      : posData.accuracy ? '✅ GPS-Position · ' + Math.round(posData.accuracy) + 'm genau'
+      : '📍 Position gesetzt';
 
     document.getElementById('recordCard').innerHTML = `
-      <div class="card-eyebrow" style="margin-bottom:10px;">📍 ${w.lat.toFixed(5)}, ${w.lng.toFixed(5)} ${accuracyText?('· '+accuracyText):''}</div>
-      <div class="card-title" style="font-size:19px; margin-bottom:14px;">${editingRecordIndex!==null?'Punkt bearbeiten':'Neuer Punkt'}</div>
+      <div class="card-title" style="font-size:19px; margin-bottom:6px;">${editingRecordIndex!==null?'Punkt bearbeiten':'Neuer Punkt'}</div>
+      <div class="card-eyebrow" id="rf_status" style="margin-bottom:14px;">${statusText}</div>
 
-      <div class="field"><label>Name</label><input id="rf_name" type="text" placeholder="z.B. Fuß des Anstiegs" value="${esc(w.name)}"></div>
+      <div class="field"><label>Titel auf Karte</label><input id="rf_name" type="text" placeholder="z.B. Startpunkt" value="${esc(w.name)}"></div>
 
       <div class="field"><label>Typ</label>
         <select id="rf_type">
@@ -1077,12 +1076,16 @@
         </select>
       </div>
 
-      <div class="field"><label>Ansage / Anweisung</label><textarea id="rf_instruction" style="min-height:80px;" placeholder="Was soll die App hier sagen?">${esc(w.instruction)}</textarea></div>
+      <div class="field"><label>Sprachnachricht (wird vorgelesen)</label><textarea id="rf_instruction" style="min-height:80px;" placeholder="z.B. Hier geht's los, starte im Eco-Modus.">${esc(w.instruction)}</textarea></div>
 
       <div class="field"><label>Hypershell-Aktion (optional)</label><input id="rf_action" type="text" placeholder="z.B. Bergmodus → 50% Power" value="${esc(w.hypershellAction)}"></div>
 
       <div class="field"><label>Fun Fact (optional)</label><textarea id="rf_funfact" style="min-height:60px;" placeholder="Wissenswertes zu diesem Ort">${esc(w.funfact)}</textarea></div>
 
+      <div style="display:flex; gap:10px;">
+        <div class="field" style="flex:1;"><label>Breitengrad</label><input id="rf_lat" type="number" step="0.00001" value="${w.lat}"></div>
+        <div class="field" style="flex:1;"><label>Längengrad</label><input id="rf_lng" type="number" step="0.00001" value="${w.lng}"></div>
+      </div>
       <div class="field"><label>Trigger-Radius (Meter)</label><input id="rf_radius" type="number" min="5" max="200" value="${w.radius||defaultRadius}"></div>
 
       <div class="card-actions">
@@ -1094,24 +1097,47 @@
 
     document.getElementById('recordOverlay').classList.add('show');
 
+    if(posData.pending){
+      getCurrentPositionAsync().then(pos => {
+        const statusEl = document.getElementById('rf_status');
+        const latEl = document.getElementById('rf_lat'), lngEl = document.getElementById('rf_lng');
+        if(!statusEl || !latEl) return; // Formular inzwischen geschlossen
+        latEl.value = pos.coords.latitude;
+        lngEl.value = pos.coords.longitude;
+        statusEl.textContent = '✅ GPS-Position · ' + Math.round(pos.coords.accuracy) + 'm genau';
+      }).catch(err => {
+        const statusEl = document.getElementById('rf_status');
+        if(statusEl) statusEl.textContent = '⚠️ Keine GPS-Position (' + err.message + ') — bitte Koordinaten manuell prüfen';
+      });
+    }
+
     document.getElementById('rf_recheck').onclick = async () => {
+      const statusEl = document.getElementById('rf_status');
+      const btn = document.getElementById('rf_recheck');
+      statusEl.textContent = '📡 GPS wird ermittelt …';
+      btn.disabled = true;
       try{
         const pos = await getCurrentPositionAsync();
-        w.lat = pos.coords.latitude; w.lng = pos.coords.longitude;
-        openRecordForm({ lat:w.lat, lng:w.lng, accuracy:pos.coords.accuracy }, editingRecordIndex);
+        document.getElementById('rf_lat').value = pos.coords.latitude;
+        document.getElementById('rf_lng').value = pos.coords.longitude;
+        statusEl.textContent = '✅ GPS-Position · ' + Math.round(pos.coords.accuracy) + 'm genau';
         toast('Position aktualisiert');
-      }catch(e){ toast('GPS-Fehler: '+e.message); }
+      }catch(e){ statusEl.textContent = '⚠️ Keine GPS-Position (' + e.message + ')'; }
+      btn.disabled = false;
     };
 
     document.getElementById('rf_cancel').onclick = closeRecordForm;
 
     document.getElementById('rf_save').onclick = () => {
       const name = document.getElementById('rf_name').value.trim();
-      if(!name){ toast('Bitte einen Namen eingeben'); return; }
+      if(!name){ toast('Bitte einen Titel eingeben'); return; }
+      const lat = parseFloat(document.getElementById('rf_lat').value);
+      const lng = parseFloat(document.getElementById('rf_lng').value);
+      if(isNaN(lat) || isNaN(lng)){ toast('Bitte gültige Koordinaten eingeben'); return; }
       const entry = {
         id: (editingRecordIndex !== null && recording[editingRecordIndex].id) ? recording[editingRecordIndex].id : 'wp_'+Date.now(),
         name,
-        lat: w.lat, lng: w.lng,
+        lat, lng,
         radius: parseInt(document.getElementById('rf_radius').value) || defaultRadius,
         type: document.getElementById('rf_type').value,
         instruction: document.getElementById('rf_instruction').value.trim(),
