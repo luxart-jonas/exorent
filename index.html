@@ -22,6 +22,11 @@
   v0.6.1 - BUGFIX: Eingabefenster lag hinter dem Einstellungen-Menü
            (z-index) und war dadurch unsichtbar. Menü schließt sich
            jetzt automatisch beim Öffnen des Formulars.
+  v0.7.0 - Mehrere gespeicherte Routen ("Meine Routen"): auswählen,
+           aktivieren, bestehende Route bearbeiten (weitere Punkte
+           ergänzen) und löschen. Aufnahme-Fortschritt ist jetzt an
+           eine konkrete Route gebunden und übersteht das Schließen
+           der App zwischen zwei Aufnahme-Sitzungen.
   ============================================================
 
   Einrichtung:
@@ -277,6 +282,14 @@
   .rec-actions button{ background:var(--bg-elevated); border:1px solid var(--border-soft); color:var(--text-dim); border-radius:9px; padding:7px 11px; font-size:12.5px; cursor:pointer; font-family:var(--sans); }
   .rec-actions button:active{ background:var(--bg-panel); }
 
+  .route-item{ background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:16px; padding:13px 15px; margin-top:10px; }
+  .route-item.active{ border-color:var(--mint); background:var(--bg-elevated); }
+  .route-item-top{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .route-item-name{ font-weight:800; font-size:14.5px; flex:1; }
+  .route-badge{ font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; background:rgba(111,217,168,0.18); color:var(--mint-bright); border:1px solid rgba(111,217,168,0.4); padding:3px 8px; border-radius:8px; }
+  .route-badge.editing{ background:rgba(217,165,63,0.18); color:var(--gold-bright); border-color:rgba(217,165,63,0.4); }
+  .route-item-meta{ font-family:var(--mono); font-size:10.5px; color:var(--text-faint); margin-top:5px; }
+
   .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--bg-elevated); border:1px solid var(--border); color:var(--text); padding:12px 20px; border-radius:14px; font-size:13px; z-index:950; opacity:0; pointer-events:none; transition:all .3s; font-weight:600; }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
@@ -327,6 +340,10 @@
   </div>
   <div class="drawer-body">
 
+    <div class="section-label">Meine Routen 🗂️</div>
+    <button class="btn-block accent" id="newRouteBtn">➕ Neue Route erstellen</button>
+    <div id="routeLibraryList"></div>
+
     <div class="section-label">Offline-Karte</div>
     <div class="row-sub" style="margin-bottom:8px;">Einmal mit WLAN/Empfang laden — danach funktioniert die Karte auch ohne Netz.</div>
     <button class="btn-block accent" id="downloadTiles">Karte offline speichern</button>
@@ -358,7 +375,7 @@
     </div>
 
     <div class="section-label">Route aufnehmen 📍</div>
-    <div class="row-sub" style="margin-bottom:12px;">Lauf die Strecke ab. An jedem Punkt "Hier markieren" antippen und Text eintippen — die Liste baut deine Route live auf.</div>
+    <div class="row-sub" id="recordingStatus" style="margin-bottom:12px;">Wähle oben "Neue Route erstellen" oder bearbeite eine bestehende Route.</div>
     <button class="btn-block accent" id="markHereBtn">📍 Hier markieren</button>
     <div id="recordList"></div>
     <div id="recordActionsWrap" style="display:none; flex-direction:column; gap:8px; margin-top:12px;">
@@ -389,7 +406,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.6.1";
+  const APP_VERSION = "0.7.0";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -445,7 +462,8 @@
   };
 
   /* ---------------- State ---------------- */
-  let route = loadRoute() || DEMO_ROUTE;
+  let routeLibrary = loadRouteLibrary();
+  let route = routeLibrary[localStorage.getItem('exotrail_active_route_id')] || routeLibrary[Object.keys(routeLibrary)[0]];
   let progress = loadProgress(route.id) || { visited: [], startedAt: null, xp: 0 };
   let testMode = localStorage.getItem('exotrail_testmode') === '1';
   let voiceOn = localStorage.getItem('exotrail_voiceon') !== '0';
@@ -456,7 +474,10 @@
   let selectedVoiceURI = localStorage.getItem('exotrail_voice') || '';
   let wakeLock = null;
   let map, routeLine, meMarker, wpMarkers = [];
-  let recording = loadRecording();
+  let recState = loadRecordingState();
+  let recording = recState.waypoints;
+  let recordingRouteId = recState.routeId;
+  let recordingRouteName = recState.routeName;
   let editingRecordIndex = null;
 
   const els = {
@@ -473,12 +494,108 @@
   };
 
   /* ---------------- Persistence ---------------- */
-  function loadRoute(){ try{ const r = localStorage.getItem('exotrail_route'); return r ? JSON.parse(r) : null; }catch(e){ return null; } }
-  function saveRoute(r){ localStorage.setItem('exotrail_route', JSON.stringify(r)); }
+  function loadRouteLibrary(){
+    try{
+      let lib = JSON.parse(localStorage.getItem('exotrail_routes_v1') || 'null');
+      if(!lib){
+        lib = {};
+        const old = localStorage.getItem('exotrail_route'); // Migration aus v0.6
+        if(old){ try{ const r = JSON.parse(old); lib[r.id] = { ...r, updatedAt: Date.now() }; }catch(e){} }
+        if(Object.keys(lib).length === 0){ lib[DEMO_ROUTE.id] = { ...DEMO_ROUTE, updatedAt: Date.now() }; }
+        localStorage.setItem('exotrail_routes_v1', JSON.stringify(lib));
+      }
+      return lib;
+    }catch(e){ return { [DEMO_ROUTE.id]: { ...DEMO_ROUTE, updatedAt: Date.now() } }; }
+  }
+  function saveRouteLibrary(){ localStorage.setItem('exotrail_routes_v1', JSON.stringify(routeLibrary)); }
   function loadProgress(routeId){ try{ const p = localStorage.getItem('exotrail_progress_'+routeId); return p ? JSON.parse(p) : null; }catch(e){ return null; } }
   function saveProgress(){ localStorage.setItem('exotrail_progress_'+route.id, JSON.stringify(progress)); }
-  function loadRecording(){ try{ const r = localStorage.getItem('exotrail_recording_draft'); return r ? JSON.parse(r) : []; }catch(e){ return []; } }
-  function saveRecordingDraft(){ localStorage.setItem('exotrail_recording_draft', JSON.stringify(recording)); }
+  function loadRecordingState(){
+    try{
+      const raw = localStorage.getItem('exotrail_recording_draft');
+      if(!raw) return { routeId:null, routeName:'', waypoints:[] };
+      const parsed = JSON.parse(raw);
+      if(Array.isArray(parsed)) return { routeId:null, routeName:'', waypoints:parsed }; // altes Format
+      return parsed;
+    }catch(e){ return { routeId:null, routeName:'', waypoints:[] }; }
+  }
+  function saveRecordingState(){ localStorage.setItem('exotrail_recording_draft', JSON.stringify({ routeId:recordingRouteId, routeName:recordingRouteName, waypoints:recording })); }
+
+  function activateRoute(id){
+    const r = routeLibrary[id];
+    if(!r) return;
+    route = r;
+    localStorage.setItem('exotrail_active_route_id', id);
+    progress = loadProgress(id) || { visited: [], startedAt: null, xp: 0 };
+    saveProgress();
+    if(map){ routeLine.setLatLngs(route.waypoints.map(w=>[w.lat,w.lng])); renderWpMarkers(); fitRoute(); }
+    render();
+    buildRouteLibraryUI();
+  }
+
+  function editRouteInRecorder(id){
+    const r = routeLibrary[id];
+    if(!r) return;
+    if(recording.length > 0 && recordingRouteId !== id){
+      if(!confirm('Es gibt noch eine offene Aufnahme ("'+(recordingRouteName||'unbenannt')+'", '+recording.length+' Punkte). Verwerfen und stattdessen "'+r.name+'" bearbeiten?')) return;
+    }
+    recording = r.waypoints.map(w => ({...w}));
+    recordingRouteId = r.id;
+    recordingRouteName = r.name;
+    saveRecordingState();
+    buildRecordList();
+    buildRouteLibraryUI();
+    toast('Bearbeite "'+r.name+'" · '+recording.length+' Punkte geladen');
+  }
+
+  function deleteRouteFromLibrary(id){
+    const r = routeLibrary[id];
+    if(!r) return;
+    if(!confirm('Route "'+r.name+'" wirklich löschen? Das kann nicht rückgängig gemacht werden.')) return;
+    delete routeLibrary[id];
+    saveRouteLibrary();
+    localStorage.removeItem('exotrail_progress_'+id);
+    if(route.id === id){
+      let remaining = Object.keys(routeLibrary);
+      if(remaining.length === 0){ routeLibrary[DEMO_ROUTE.id] = { ...DEMO_ROUTE, updatedAt: Date.now() }; saveRouteLibrary(); remaining = [DEMO_ROUTE.id]; }
+      activateRoute(remaining[0]);
+    }
+    if(recordingRouteId === id){ recording=[]; recordingRouteId=null; recordingRouteName=''; saveRecordingState(); buildRecordList(); }
+    buildRouteLibraryUI();
+    toast('Route gelöscht');
+  }
+
+  function buildRouteLibraryUI(){
+    const wrap = document.getElementById('routeLibraryList');
+    if(!wrap) return;
+    const ids = Object.keys(routeLibrary).sort((a,b) => (routeLibrary[b].updatedAt||0) - (routeLibrary[a].updatedAt||0));
+    wrap.innerHTML = ids.map(id => {
+      const r = routeLibrary[id];
+      const isActive = route && route.id === id;
+      const isEditing = recordingRouteId === id;
+      return `
+        <div class="route-item ${isActive?'active':''}">
+          <div class="route-item-top">
+            <span class="route-item-name">${esc(r.name)}</span>
+            ${isActive?'<span class="route-badge">AKTIV</span>':''}
+            ${isEditing?'<span class="route-badge editing">IN ARBEIT</span>':''}
+          </div>
+          <div class="route-item-meta">${(r.waypoints||[]).length} Punkte${r.updatedAt ? ' · zuletzt ' + new Date(r.updatedAt).toLocaleDateString('de-DE') : ''}</div>
+          <div class="rec-actions">
+            <button data-act="activate" data-id="${id}">▶️ Aktivieren</button>
+            <button data-act="edit" data-id="${id}">✏️ Bearbeiten</button>
+            <button data-act="delete" data-id="${id}">🗑️</button>
+          </div>
+        </div>`;
+    }).join('');
+    wrap.querySelectorAll('[data-act]').forEach(btn => {
+      const id = btn.dataset.id;
+      if(btn.dataset.act === 'activate') btn.onclick = () => { activateRoute(id); toast('"'+routeLibrary[id].name+'" ist jetzt aktiv'); };
+      if(btn.dataset.act === 'edit') btn.onclick = () => editRouteInRecorder(id);
+      if(btn.dataset.act === 'delete') btn.onclick = () => deleteRouteFromLibrary(id);
+    });
+  }
+  function toast(msg){ els.toast.textContent = msg; els.toast.classList.add('show'); setTimeout(()=> els.toast.classList.remove('show'), 2200); }
 
   /* ---------------- Geo helpers ---------------- */
   function haversine(lat1,lon1,lat2,lon2){
@@ -950,6 +1067,7 @@
     document.getElementById('soundSwitch').classList.toggle('on', soundOn);
     buildSimChips();
     buildRecordList();
+    buildRouteLibraryUI();
     const total = await countTiles();
     document.getElementById('tileStatus').textContent = total > 0
       ? '✅ ' + total + ' Kacheln bereits offline gespeichert'
@@ -962,34 +1080,52 @@
   document.getElementById('downloadTiles').onclick = downloadOfflineTiles;
 
   document.getElementById('markHereBtn').onclick = () => {
+    if(!recordingRouteId){ toast('Bitte zuerst oben "Neue Route erstellen" oder eine Route zum Bearbeiten öffnen'); return; }
     const fallback = window.__lastPos
       || (map ? { lat: map.getCenter().lat, lng: map.getCenter().lng } : { lat: route.waypoints[0].lat, lng: route.waypoints[0].lng });
     openRecordForm({ lat: fallback.lat, lng: fallback.lng, pending: true });
   };
 
+  document.getElementById('newRouteBtn').onclick = () => {
+    const suggested = 'Route ' + (Object.keys(routeLibrary).length + 1).toString().padStart(2,'0');
+    const name = prompt('Name der neuen Route:', suggested);
+    if(!name) return;
+    if(recording.length > 0 && !confirm('Es gibt noch eine offene Aufnahme ("'+(recordingRouteName||'unbenannt')+'", '+recording.length+' Punkte). Verwerfen und neue Route starten?')) return;
+    recording = [];
+    recordingRouteId = 'route-'+Date.now();
+    recordingRouteName = name;
+    saveRecordingState();
+    buildRecordList();
+    buildRouteLibraryUI();
+    toast('Neue Route "'+name+'" gestartet — jetzt "Hier markieren" antippen');
+  };
+
   document.getElementById('finishRecording').onclick = () => {
     if(recording.length === 0) return;
-    const name = prompt('Name für diese Route:', route.name || 'Meine Route');
-    if(name === null) return;
-    const newRoute = { id: 'route-'+Date.now(), name: name || 'Meine Route', waypoints: recording.map(w => ({...w})) };
-    route = newRoute;
-    saveRoute(route);
-    progress = { visited: [], startedAt: null, xp: 0 };
-    saveProgress();
+    const finalName = recordingRouteName || prompt('Name für diese Route:', 'Meine Route') || 'Meine Route';
+    const finalId = recordingRouteId || ('route-'+Date.now());
+    const routeObj = { id: finalId, name: finalName, waypoints: recording.map(w => ({...w})), updatedAt: Date.now() };
+    routeLibrary[finalId] = routeObj;
+    saveRouteLibrary();
+    activateRoute(finalId);
     recording = [];
-    saveRecordingDraft();
+    recordingRouteId = null;
+    recordingRouteName = '';
+    saveRecordingState();
     buildRecordList();
-    if(map){ routeLine.setLatLngs(route.waypoints.map(w=>[w.lat,w.lng])); renderWpMarkers(); fitRoute(); }
-    render();
+    buildRouteLibraryUI();
     document.getElementById('routeJson').value = JSON.stringify(route, null, 2);
-    toast('Route gespeichert · ' + route.waypoints.length + ' Punkte 🎉');
+    toast('Route "'+finalName+'" gespeichert · '+routeObj.waypoints.length+' Punkte 🎉');
   };
 
   document.getElementById('clearRecording').onclick = () => {
     if(!confirm('Aufnahme wirklich verwerfen? Alle markierten Punkte gehen verloren.')) return;
     recording = [];
-    saveRecordingDraft();
+    recordingRouteId = null;
+    recordingRouteName = '';
+    saveRecordingState();
     buildRecordList();
+    buildRouteLibraryUI();
   };
 
   document.getElementById('testSwitch').onclick = function(){ setTestMode(!testMode); };
@@ -1002,13 +1138,11 @@
     try{
       const parsed = JSON.parse(document.getElementById('routeJson').value);
       if(!parsed.waypoints || !parsed.id) throw new Error('Route braucht "id" und "waypoints"');
-      route = parsed;
-      saveRoute(route);
-      progress = loadProgress(route.id) || { visited: [], startedAt:null, xp:0 };
+      routeLibrary[parsed.id] = { ...parsed, updatedAt: Date.now() };
+      saveRouteLibrary();
+      activateRoute(parsed.id);
       toast('Route übernommen');
       buildSimChips();
-      if(map){ routeLine.setLatLngs(route.waypoints.map(w=>[w.lat,w.lng])); renderWpMarkers(); fitRoute(); }
-      render();
     }catch(e){ toast('Fehler im JSON: ' + e.message); }
   };
   document.getElementById('resetProgress').onclick = function(){
@@ -1017,16 +1151,12 @@
     saveProgress(); render(); renderWpMarkers(); toast('Fortschritt zurückgesetzt');
   };
   document.getElementById('factoryReset').onclick = function(){
-    if(!confirm('Zur Demo-Route zurücksetzen? Eigene Route geht verloren.')) return;
-    localStorage.removeItem('exotrail_route');
-    route = DEMO_ROUTE;
-    progress = { visited: [], startedAt: null, xp: 0 };
-    saveProgress(); render();
-    if(map){ routeLine.setLatLngs(route.waypoints.map(w=>[w.lat,w.lng])); renderWpMarkers(); fitRoute(); }
+    if(!confirm('Demo-Route neu laden und aktivieren? Deine eigenen Routen bleiben erhalten.')) return;
+    routeLibrary[DEMO_ROUTE.id] = { ...DEMO_ROUTE, updatedAt: Date.now() };
+    saveRouteLibrary();
+    activateRoute(DEMO_ROUTE.id);
     toast('Demo-Route geladen');
   };
-
-  function toast(msg){ els.toast.textContent = msg; els.toast.classList.add('show'); setTimeout(()=> els.toast.classList.remove('show'), 2200); }
 
   /* ---------------- Route-Aufnahme (Recorder) ---------------- */
   function getCurrentPositionAsync(){
@@ -1039,7 +1169,20 @@
   function buildRecordList(){
     const wrap = document.getElementById('recordList');
     const actionsWrap = document.getElementById('recordActionsWrap');
+    const statusEl = document.getElementById('recordingStatus');
+    const markBtn = document.getElementById('markHereBtn');
     if(!wrap) return;
+
+    if(statusEl){
+      if(recordingRouteId){
+        const known = routeLibrary[recordingRouteId];
+        statusEl.innerHTML = (known ? '✏️ Du bearbeitest: ' : '🆕 Neue Route: ') + '<b style="color:var(--text);">' + esc(recordingRouteName) + '</b>' + (recording.length ? ' · ' + recording.length + ' Punkte' : '');
+      } else {
+        statusEl.textContent = 'Wähle oben "Neue Route erstellen" oder bearbeite eine bestehende Route.';
+      }
+    }
+    if(markBtn) markBtn.style.opacity = recordingRouteId ? '1' : '.5';
+
     wrap.innerHTML = recording.map((w,i) => `
       <div class="rec-item" data-idx="${i}">
         <div class="rec-item-top"><span class="rec-emoji">${TYPE_EMOJI[w.type]||'📍'}</span><span class="rec-name">${i+1}. ${esc(w.name)}</span></div>
@@ -1055,10 +1198,10 @@
 
     wrap.querySelectorAll('.rec-item').forEach(item => {
       const i = parseInt(item.dataset.idx);
-      item.querySelector('[data-act="up"]').onclick = () => { if(i>0){ [recording[i-1],recording[i]]=[recording[i],recording[i-1]]; saveRecordingDraft(); buildRecordList(); } };
-      item.querySelector('[data-act="down"]').onclick = () => { if(i<recording.length-1){ [recording[i+1],recording[i]]=[recording[i],recording[i+1]]; saveRecordingDraft(); buildRecordList(); } };
+      item.querySelector('[data-act="up"]').onclick = () => { if(i>0){ [recording[i-1],recording[i]]=[recording[i],recording[i-1]]; saveRecordingState(); buildRecordList(); } };
+      item.querySelector('[data-act="down"]').onclick = () => { if(i<recording.length-1){ [recording[i+1],recording[i]]=[recording[i],recording[i+1]]; saveRecordingState(); buildRecordList(); } };
       item.querySelector('[data-act="edit"]').onclick = () => openRecordForm({ lat:recording[i].lat, lng:recording[i].lng }, i);
-      item.querySelector('[data-act="del"]').onclick = () => { if(confirm('Punkt "'+recording[i].name+'" löschen?')){ recording.splice(i,1); saveRecordingDraft(); buildRecordList(); } };
+      item.querySelector('[data-act="del"]').onclick = () => { if(confirm('Punkt "'+recording[i].name+'" löschen?')){ recording.splice(i,1); saveRecordingState(); buildRecordList(); } };
     });
   }
 
@@ -1156,7 +1299,7 @@
       };
       if(editingRecordIndex !== null) recording[editingRecordIndex] = entry;
       else recording.push(entry);
-      saveRecordingDraft();
+      saveRecordingState();
       buildRecordList();
       closeRecordForm();
       toast(editingRecordIndex !== null ? 'Punkt aktualisiert' : 'Punkt hinzugefügt · '+recording.length+' insgesamt');
