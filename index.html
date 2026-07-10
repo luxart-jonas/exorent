@@ -300,7 +300,8 @@
 
   <div class="map-wrap">
     <div id="map"></div>
-    <div class="map-center-btn" id="centerBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="5"/></svg></div>
+    <div class="map-center-btn" id="locateBtn" style="bottom:56px;" title="Zu meinem echten Standort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="3"/></svg></div>
+    <div class="map-center-btn" id="centerBtn" title="Zur Route zoomen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6l7-3 8 3 7-3v15l-7 3-8-3-7 3z"/><path d="M8 3v15M16 6v15"/></svg></div>
   </div>
 
   <div class="main" id="mainView"></div>
@@ -624,6 +625,25 @@
     fitRoute();
 
     document.getElementById('centerBtn').onclick = fitRoute;
+    document.getElementById('locateBtn').onclick = locateMe;
+  }
+
+  async function locateMe(){
+    const btn = document.getElementById('locateBtn');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '⏳';
+    try{
+      const pos = await getCurrentPositionAsync();
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      window.__lastPos = { lat, lng };
+      updateMeMarker(lat, lng);
+      map.setView([lat, lng], 16);
+      const d = Math.round(haversine(lat, lng, route.waypoints[0].lat, route.waypoints[0].lng)/1000);
+      toast('Du bist hier · ' + d + ' km von der Route entfernt');
+    }catch(e){
+      toast('Standort nicht verfügbar: ' + e.message);
+    }
+    btn.innerHTML = originalHtml;
   }
 
   function fitRoute(){
