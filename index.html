@@ -59,6 +59,10 @@
              die Karte groß und zentriert automatisch auf die
              eigene Position. Wer rauszoomt/verschiebt, sieht einen
              "🎯 Zurück zur Navigation"-Button zum Wiederandocken.
+  v0.9.1 - Aufnahme-Modus jetzt direkt in der Hauptansicht: sobald
+           eine Route in Bearbeitung ist, zeigt der Hauptbildschirm
+           automatisch "📍 Markierung setzen" und "✅ Route speichern" —
+           kein Umweg mehr über die Einstellungen während des Laufens.
   ============================================================
 
   Einrichtung:
@@ -461,7 +465,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.9.0";
+  const APP_VERSION = "0.9.1";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -936,6 +940,7 @@
   function nextUnvisitedIndex(){ return route.waypoints.findIndex(w => !progress.visited.includes(w.id)); }
 
   function render(){
+    if(recordingRouteId){ renderRecordingView(); return; }
     updateHUD();
     const nIdx = nextUnvisitedIndex();
     if(nIdx === -1){ renderFinish(); renderWpMarkers(); if(navModeActive) exitNavMode(); return; }
@@ -968,6 +973,39 @@
     };
     document.getElementById('navStartBtn').onclick = () => { navModeActive ? exitNavMode() : enterNavMode(); };
     updateDistanceDisplay(target);
+  }
+
+  function renderRecordingView(){
+    const editing = !!routeLibrary[recordingRouteId];
+    const num = recording.length;
+    let html = `<div class="quest-card">
+      <div class="quest-eyebrow">${editing ? '✏️ Route bearbeiten' : '🆕 Neue Route'}</div>
+      <div class="quest-name" style="font-size:18px; margin-top:2px;"><b>${esc(recordingRouteName)}</b></div>
+      <div class="row-sub" style="margin-top:6px;">${num} Punkt${num===1?'':'e'} markiert${recordingTrack.length ? ' · ' + recordingTrack.length + ' Spurpunkte' : ''}</div>
+      <button class="btn btn-primary" id="mainMarkBtn" style="width:100%; margin-top:14px; font-size:16.5px; padding:17px;">📍 Markierung setzen</button>
+    </div>`;
+
+    if(num > 0){
+      html += '<div class="chips-scroll">';
+      recording.forEach((w) => {
+        html += `<div class="step-chip done">
+          <div class="step-chip-icon">${TYPE_EMOJI[w.type]||'📍'}</div>
+          <div class="step-chip-name">${esc(w.name)}</div>
+        </div>`;
+      });
+      html += '</div>';
+    }
+
+    html += `<button class="btn-block accent" id="mainSaveRouteBtn" ${num===0?'style="opacity:.4; pointer-events:none;"':''}>✅ Route speichern${num?' ('+num+' Punkte)':''}</button>`;
+    html += `<button class="fallback-btn" id="mainSettingsBtn" style="margin-top:10px;">⚙️ Punkte bearbeiten / Einstellungen</button>`;
+
+    els.main.innerHTML = html;
+    document.getElementById('mainMarkBtn').onclick = doMarkHere;
+    if(num > 0) document.getElementById('mainSaveRouteBtn').onclick = doFinishRecording;
+    document.getElementById('mainSettingsBtn').onclick = () => {
+      buildRecordList(); buildRouteLibraryUI();
+      drawerEl.classList.add('open');
+    };
   }
 
   function updateDistanceDisplay(target){
@@ -1214,7 +1252,7 @@
   document.getElementById('closeDrawer').onclick = () => { drawerEl.classList.remove('open'); if(map) setTimeout(() => map.invalidateSize(), 100); };
   document.getElementById('downloadTiles').onclick = downloadOfflineTiles;
 
-  document.getElementById('markHereBtn').onclick = () => {
+  function doMarkHere(){
     if(!recordingRouteId){ toast('Bitte zuerst oben "Neue Route erstellen" oder eine Route zum Bearbeiten öffnen'); return; }
     const pos = window.__recPos || window.__lastPos
       || (map ? { lat: map.getCenter().lat, lng: map.getCenter().lng } : { lat: route.waypoints[0].lat, lng: route.waypoints[0].lng });
@@ -1236,7 +1274,8 @@
     if(navigator.vibrate) navigator.vibrate(60);
     if(soundOn) playChime();
     toast('📍 Punkt ' + label + ' markiert · Details kannst du später bearbeiten');
-  };
+  }
+  document.getElementById('markHereBtn').onclick = doMarkHere;
 
   document.getElementById('newRouteBtn').onclick = () => {
     const suggested = 'Route ' + (Object.keys(routeLibrary).length + 1).toString().padStart(2,'0');
@@ -1252,10 +1291,10 @@
     buildRouteLibraryUI();
     startTrackRecording();
     drawerEl.classList.remove('open');
-    toast('Aufzeichnung läuft — lauf los, dann "Hier markieren" antippen');
+    toast('Aufzeichnung läuft — lauf los, dann "Markierung setzen" antippen');
   };
 
-  document.getElementById('finishRecording').onclick = () => {
+  function doFinishRecording(){
     if(recording.length === 0) return;
     const finalName = recordingRouteName || prompt('Name für diese Route:', 'Meine Route') || 'Meine Route';
     const finalId = recordingRouteId || ('route-'+Date.now());
@@ -1263,17 +1302,18 @@
     routeLibrary[finalId] = routeObj;
     saveRouteLibrary();
     stopTrackRecording();
-    activateRoute(finalId);
     recording = [];
     recordingTrack = [];
     recordingRouteId = null;
     recordingRouteName = '';
     saveRecordingState();
+    activateRoute(finalId);
     buildRecordList();
     buildRouteLibraryUI();
     document.getElementById('routeJson').value = JSON.stringify(route, null, 2);
     toast('Route "'+finalName+'" gespeichert · '+routeObj.waypoints.length+' Punkte, '+routeObj.track.length+' Spurpunkte 🎉');
-  };
+  }
+  document.getElementById('finishRecording').onclick = doFinishRecording;
 
   document.getElementById('clearRecording').onclick = () => {
     if(!confirm('Aufnahme wirklich verwerfen? Alle markierten Punkte und die Spur gehen verloren.')) return;
@@ -1384,6 +1424,8 @@
       item.querySelector('[data-act="edit"]').onclick = () => openRecordForm({ lat:recording[i].lat, lng:recording[i].lng }, i);
       item.querySelector('[data-act="del"]').onclick = () => { if(confirm('Punkt "'+recording[i].name+'" löschen?')){ recording.splice(i,1); saveRecordingState(); buildRecordList(); } };
     });
+
+    if(recordingRouteId) renderRecordingView(); else render();
   }
 
   function openRecordForm(posData, existingIndex){
