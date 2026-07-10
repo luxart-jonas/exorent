@@ -32,6 +32,11 @@
            dabei trotzdem im Hintergrund gespeichert (führte dazu,
            dass Routen ungesehen sofort als "abgeschlossen" galten).
            Menü schließt sich jetzt automatisch bei jeder Ankunft.
+  v0.7.2 - Klarstellung: Fortschritt wurde schon vorher automatisch
+           gespeichert (kein Reset beim Schließen/Öffnen) — jetzt
+           sichtbar bestätigt per Start-Toast ("Weiter geht's: Punkt
+           X von Y"). "Neue Runde starten" fragt jetzt zur Sicherheit
+           nach, da es den Fortschritt absichtlich zurücksetzt.
   ============================================================
 
   Einrichtung:
@@ -410,7 +415,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.7.1";
+  const APP_VERSION = "0.7.2";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -871,13 +876,16 @@
         <div class="stat"><div class="stat-val">${elapsed}</div><div class="stat-label">Minuten</div></div>
         <div class="stat"><div class="stat-val">35€</div><div class="stat-label">Für den Mars</div></div>
       </div>
+      <div class="row-sub" style="margin-bottom:12px; text-align:center;">Dieser Stand ist gespeichert und bleibt auch nach Schließen der App so — "Neue Runde starten" setzt ihn absichtlich zurück.</div>
       <button class="btn btn-primary" style="width:100%;" id="restartBtn">Neue Runde starten</button>
     </div>`;
     document.getElementById('restartBtn').onclick = () => {
+      if(!confirm('Fortschritt wirklich zurücksetzen und von vorne starten?')) return;
       progress = { visited: [], startedAt: Date.now(), xp: 0 };
       saveProgress(); render();
     };
   }
+
 
   function esc(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
@@ -1327,7 +1335,17 @@
   requestWakeLock();
   if(testMode){ els.gpsDot.className = 'gps-dot sim'; els.gpsLabel.textContent = 'SIM'; }
   else { startLiveGPS(); }
-  setTimeout(() => toast('ExoTrail v' + APP_VERSION + ' geladen'), 400);
+
+  setTimeout(() => {
+    const visited = progress.visited.length, total = route.waypoints.length;
+    if(visited === 0){
+      toast('ExoTrail v' + APP_VERSION + ' · "' + route.name + '" · Start');
+    } else if(visited < total){
+      toast('Weiter geht\'s: "' + route.name + '" · Punkt ' + (visited+1) + ' von ' + total + ' (gespeichert)');
+    } else {
+      toast('"' + route.name + '" bereits abgeschlossen · ' + progress.xp + ' XP gespeichert');
+    }
+  }, 400);
 
 })();
 </script>
