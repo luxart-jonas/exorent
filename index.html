@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>ExoTrail — Mission Rösrath</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<!--
+  ============================================================
+  EXOTRAIL NAVI v2 — Prototyp für ExoRent
+  ============================================================
+  NEU in v2:
+  - Echte OpenStreetMap-Karte (Leaflet) statt reiner Liste
+  - Offline-Kacheln: einmal an der Verleihstation (mit WLAN) auf
+    "Karte offline speichern" tippen -> Kacheln landen in IndexedDB
+    -> funktionieren danach ganz ohne Empfang im Wald
+  - Gamification: XP, Level/Rang (Mars-Theme passend zu deiner
+    "35€ auf den Mars"-Kampagne), Konfetti, Sound-Ding bei jeder
+    Station, Mascot-Sprechblase (Astronaut)
+
+  Einrichtung:
+  1. Datei in "index.html" umbenennen, auf GitHub Pages hosten
+  2. Vor Kundenübergabe: App einmal MIT WLAN/Empfang öffnen und in
+     den Einstellungen auf "Karte offline speichern" tippen — lädt
+     alle Kartenausschnitte der Route für Offline-Nutzung
+  3. Demo-Route unten = ERFUNDENE Platzhalter-Koordinaten
+     (Raum Rösrath/Hoffnungsthal). Über Einstellungen -> Route (JSON)
+     durch echte Punkte ersetzen.
+  4. Hinweis Kartenkacheln: OpenStreetMap erlaubt normale Nutzung
+     im Browser (auch für kleine Business-Cases) kostenlos. Falls du
+     später viele Geräte/Kunden gleichzeitig hast, lohnt sich ein
+     eigener Tile-Anbieter (z.B. MapTiler Free-Tier) statt der
+     öffentlichen tile.openstreetmap.org Server.
+  ============================================================
+-->
+<style>
+  :root{
+    --bg: #0c1210;
+    --bg-panel: #151d18;
+    --bg-elevated: #1c2620;
+    --gold: #d9a53f;
+    --gold-bright: #f0be5c;
+    --mint: #6fd9a8;
+    --mint-bright: #8ef0c0;
+    --coral: #ff8f66;
+    --sky: #6fb3d9;
+    --text: #f1efe4;
+    --text-dim: #9a9d8f;
+    --text-faint: #5c6058;
+    --danger: #ff7a63;
+    --border: rgba(217,165,63,0.2);
+    --border-soft: rgba(241,239,228,0.09);
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans);
+    overscroll-behavior:none;
+    user-select:none; -webkit-user-select:none;
+  }
+  body{
+    background-image:
+      radial-gradient(ellipse 120% 50% at 50% -10%, rgba(111,217,168,0.10), transparent 60%),
+      radial-gradient(ellipse 100% 50% at 50% 110%, rgba(217,165,63,0.06), transparent 60%);
+  }
+
+  #app{ height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:calc(env(safe-area-inset-top) + 12px) 16px 10px;
+    flex-shrink:0; gap:10px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .mascot-avatar{
+    width:40px; height:40px; border-radius:50%; background:var(--bg-elevated);
+    border:2px solid var(--gold); display:flex; align-items:center; justify-content:center;
+    font-size:20px; flex-shrink:0;
+  }
+  .brand-info{ min-width:0; }
+  .rank-name{ font-size:13px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .xp-bar-wrap{ width:120px; height:6px; border-radius:4px; background:var(--bg-elevated); margin-top:4px; overflow:hidden; }
+  .xp-bar-fill{ height:100%; background:linear-gradient(90deg, var(--gold), var(--mint-bright)); border-radius:4px; transition:width .5s ease; }
+  .gps-pill{
+    display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:20px;
+    background:var(--bg-elevated); border:1px solid var(--border-soft); flex-shrink:0;
+  }
+  .gps-dot{ width:8px; height:8px; border-radius:50%; background:var(--text-faint); }
+  .gps-dot.live{ background:var(--mint-bright); box-shadow:0 0 6px var(--mint-bright); }
+  .gps-dot.sim{ background:var(--gold-bright); box-shadow:0 0 6px var(--gold-bright); animation:blink 1.4s infinite; }
+  @keyframes blink{ 50%{ opacity:.3; } }
+  .gps-label{ font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); }
+  .icon-btn{
+    width:38px; height:38px; border-radius:12px; flex-shrink:0;
+    background:var(--bg-elevated); border:1px solid var(--border-soft);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text-dim); cursor:pointer;
+  }
+  .icon-btn:active{ background:var(--bg-panel); }
+  .icon-btn svg{ width:18px; height:18px; }
+
+  /* ---------- Map ---------- */
+  .map-wrap{ flex-shrink:0; margin:0 16px; border-radius:20px; overflow:hidden; border:1px solid var(--border); position:relative; height:38vh; min-height:220px; }
+  #map{ width:100%; height:100%; background:#141a15; }
+  .map-center-btn{
+    position:absolute; bottom:10px; right:10px; z-index:410;
+    width:38px; height:38px; border-radius:50%; background:var(--bg-elevated);
+    border:1px solid var(--border); display:flex; align-items:center; justify-content:center;
+    color:var(--gold-bright); box-shadow:0 4px 12px rgba(0,0,0,.4);
+  }
+  .map-center-btn svg{ width:18px; height:18px; }
+  .leaflet-container{ background:#141a15; font-family:var(--sans); }
+  .leaflet-control-attribution{ background:rgba(12,18,16,0.7)!important; color:var(--text-faint)!important; font-size:9px!important; }
+  .leaflet-control-attribution a{ color:var(--text-dim)!important; }
+  .wp-pin{ display:flex; align-items:center; justify-content:center; font-size:18px; filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+  .wp-pin.done{ opacity:.55; }
+  .wp-pin-ring{ position:absolute; inset:-4px; border-radius:50%; border:2px solid var(--gold-bright); animation:ringpulse 1.8s infinite; }
+  @keyframes ringpulse{ 0%{ transform:scale(.8); opacity:1; } 100%{ transform:scale(1.6); opacity:0; } }
+  .me-dot{ width:16px; height:16px; border-radius:50%; background:var(--sky); border:3px solid #fff; box-shadow:0 0 0 4px rgba(111,179,217,0.3); }
+
+  /* ---------- Main scroll area (below map) ---------- */
+  .main{ flex:1; overflow-y:auto; padding:16px 16px 24px; }
+
+  /* Quest hero card */
+  .quest-card{
+    background:var(--bg-panel); border:1px solid var(--border); border-radius:20px;
+    padding:18px 18px 16px; margin-bottom:16px;
+  }
+  .quest-eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--mint-bright); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+  .quest-dist{ font-family:var(--mono); font-size:44px; font-weight:700; line-height:1; letter-spacing:-.02em; }
+  .quest-dist span{ font-size:18px; color:var(--text-dim); font-weight:400; margin-left:4px; }
+  .quest-name{ font-size:15px; color:var(--text-dim); margin-top:8px; }
+  .quest-name b{ color:var(--text); }
+
+  /* Step chips (mini quest trail) */
+  .chips-scroll{ display:flex; gap:8px; overflow-x:auto; padding:2px 2px 8px; margin-bottom:6px; }
+  .chips-scroll::-webkit-scrollbar{ display:none; }
+  .step-chip{
+    flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:6px;
+    width:64px; padding:10px 6px; border-radius:16px; background:var(--bg-panel);
+    border:1px solid var(--border-soft); opacity:.5;
+  }
+  .step-chip.current{ opacity:1; border-color:var(--gold); background:var(--bg-elevated); box-shadow:0 0 0 1px var(--gold); }
+  .step-chip.done{ opacity:.85; border-color:rgba(111,217,168,0.35); }
+  .step-chip-icon{ font-size:20px; }
+  .step-chip-name{ font-size:10px; text-align:center; line-height:1.2; color:var(--text-dim); }
+  .step-chip.current .step-chip-name{ color:var(--text); font-weight:700; }
+  .step-chip-xp{ font-family:var(--mono); font-size:9px; color:var(--gold-bright); }
+
+  .fallback-btn{
+    margin-top:6px; width:100%; padding:13px; border-radius:14px;
+    background:transparent; border:1px dashed var(--border-soft);
+    color:var(--text-faint); font-family:var(--sans); font-size:12.5px;
+    cursor:pointer;
+  }
+  .fallback-btn:active{ background:var(--bg-panel); }
+
+  /* ---------- Trigger overlay ---------- */
+  .overlay{
+    position:fixed; inset:0; z-index:800;
+    background:rgba(6,9,7,0.93); backdrop-filter:blur(6px);
+    display:flex; align-items:flex-end; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .35s;
+  }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+  .card{
+    width:100%; max-width:520px; max-height:88vh; overflow-y:auto;
+    background:var(--bg-panel); border:1px solid var(--border);
+    border-radius:28px 28px 0 0; padding:26px 22px calc(env(safe-area-inset-bottom) + 22px);
+    transform:translateY(30px); transition:transform .4s cubic-bezier(.2,.9,.3,1.1);
+  }
+  .overlay.show .card{ transform:translateY(0); }
+
+  .mascot-bubble{ display:flex; align-items:flex-start; gap:12px; margin-bottom:18px; }
+  .mascot-face{ width:52px; height:52px; border-radius:50%; background:var(--bg-elevated); border:2px solid var(--gold); display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0; }
+  .bubble{ background:var(--bg-elevated); border:1px solid var(--border-soft); border-radius:16px 16px 16px 4px; padding:12px 14px; font-size:13px; color:var(--gold-bright); font-weight:700; letter-spacing:.02em; }
+
+  .card-title{ font-size:23px; font-weight:800; line-height:1.32; margin-bottom:16px; }
+
+  .xp-pop{
+    display:inline-flex; align-items:center; gap:6px; background:rgba(111,217,168,0.15);
+    border:1px solid rgba(111,217,168,0.4); color:var(--mint-bright); font-family:var(--mono);
+    font-size:13px; font-weight:700; padding:6px 12px; border-radius:20px; margin-bottom:16px;
+  }
+
+  .action-box{
+    background:linear-gradient(135deg, rgba(217,165,63,0.16), rgba(255,143,102,0.08));
+    border:1px solid var(--border); border-radius:16px; padding:15px 16px; margin-bottom:14px;
+    display:flex; align-items:center; gap:13px;
+  }
+  .action-box-icon{ font-size:24px; flex-shrink:0; }
+  .action-box-text{ font-size:14px; color:var(--text); line-height:1.4; font-weight:600; }
+
+  .funfact{
+    background:rgba(111,179,217,0.08); border:1px solid rgba(111,179,217,0.25);
+    border-radius:14px; padding:12px 14px; margin-bottom:20px; font-size:13.5px; color:var(--text-dim); line-height:1.55;
+  }
+  .funfact-label{ font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--sky); margin-bottom:5px; }
+
+  .card-actions{ display:flex; gap:10px; }
+  .btn{ flex:1; padding:16px; border-radius:14px; border:none; font-size:15.5px; font-weight:800; cursor:pointer; font-family:var(--sans); }
+  .btn-primary{ background:var(--gold); color:#181405; }
+  .btn-primary:active{ background:var(--gold-bright); transform:scale(.98); }
+  .btn-ghost{ background:transparent; border:1px solid var(--border-soft); color:var(--text-dim); flex:0 0 52px; display:flex; align-items:center; justify-content:center; }
+  .btn-ghost svg{ width:18px; height:18px; }
+
+  /* ---------- Finish screen ---------- */
+  .finish{ display:flex; flex-direction:column; align-items:center; text-align:center; padding:26px 6px 6px; }
+  .finish-mascot{ font-size:56px; margin-bottom:6px; }
+  .finish-eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--mint-bright); margin-bottom:8px; }
+  .finish-title{ font-size:27px; font-weight:800; margin-bottom:6px; }
+  .finish-rank{ font-size:15px; color:var(--gold-bright); font-weight:700; margin-bottom:24px; }
+  .stats{ display:grid; grid-template-columns:1fr 1fr; gap:10px; width:100%; margin-bottom:22px; }
+  .stat{ background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:16px; padding:16px; }
+  .stat-val{ font-family:var(--mono); font-size:24px; font-weight:700; color:var(--gold-bright); }
+  .stat-label{ font-size:10.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.09em; margin-top:4px; }
+
+  /* ---------- Settings drawer ---------- */
+  .drawer{ position:fixed; inset:0; z-index:900; background:var(--bg); transform:translateX(100%); transition:transform .3s ease; display:flex; flex-direction:column; }
+  .drawer.open{ transform:translateX(0); }
+  .drawer-head{ display:flex; align-items:center; justify-content:space-between; padding:calc(env(safe-area-inset-top) + 16px) 18px 16px; border-bottom:1px solid var(--border-soft); flex-shrink:0; }
+  .drawer-title{ font-size:17px; font-weight:800; }
+  .drawer-body{ flex:1; overflow-y:auto; padding:18px; }
+  .section-label{ font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold-bright); margin:22px 0 10px; }
+  .section-label:first-child{ margin-top:0; }
+  .field{ margin-bottom:18px; }
+  .field label{ display:block; font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; }
+  .field select, .field textarea, .field input{ width:100%; background:var(--bg-panel); border:1px solid var(--border-soft); color:var(--text); border-radius:12px; padding:12px; font-family:var(--mono); font-size:13px; }
+  .field textarea{ min-height:200px; resize:vertical; line-height:1.5; }
+  .row{ display:flex; align-items:center; justify-content:space-between; padding:13px 0; border-bottom:1px solid var(--border-soft); }
+  .row-label{ font-size:14px; }
+  .row-sub{ font-size:11.5px; color:var(--text-dim); margin-top:2px; }
+  .switch{ width:46px; height:26px; border-radius:13px; background:var(--bg-elevated); border:1px solid var(--border-soft); position:relative; cursor:pointer; flex-shrink:0; }
+  .switch.on{ background:var(--mint); border-color:var(--mint); }
+  .switch::after{ content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:var(--text-dim); transition:transform .2s; }
+  .switch.on::after{ transform:translateX(20px); background:#0c1210; }
+  .sim-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .chip{ background:var(--bg-panel); border:1px solid var(--border-soft); color:var(--text-dim); padding:9px 13px; border-radius:10px; font-size:12px; font-family:var(--mono); cursor:pointer; }
+  .chip:active{ background:var(--bg-elevated); }
+  .btn-block{ width:100%; padding:14px; border-radius:14px; background:var(--bg-panel); border:1px solid var(--border-soft); color:var(--text); font-size:14px; margin-top:8px; cursor:pointer; font-weight:600; }
+  .btn-block.accent{ background:linear-gradient(135deg, rgba(217,165,63,.25), rgba(111,217,168,.15)); border-color:var(--gold); color:var(--gold-bright); }
+  .btn-danger{ color:var(--danger); border-color:rgba(255,122,99,0.3); }
+  .status-line{ font-family:var(--mono); font-size:11px; color:var(--text-faint); padding:10px 0; line-height:1.6; }
+  .tile-progress-wrap{ height:8px; border-radius:5px; background:var(--bg-elevated); overflow:hidden; margin-top:10px; }
+  .tile-progress-fill{ height:100%; background:linear-gradient(90deg, var(--sky), var(--mint-bright)); width:0%; transition:width .2s; }
+
+  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--bg-elevated); border:1px solid var(--border); color:var(--text); padding:12px 20px; border-radius:14px; font-size:13px; z-index:950; opacity:0; pointer-events:none; transition:all .3s; font-weight:600; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  #confettiCanvas{ position:fixed; inset:0; z-index:1000; pointer-events:none; }
+
+  ::-webkit-scrollbar{ width:0; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="mascot-avatar" id="mascotAvatar">🧑‍🚀</div>
+      <div class="brand-info">
+        <div class="rank-name" id="rankName">Kadett</div>
+        <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xpFill" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div class="gps-pill">
+      <div class="gps-dot" id="gpsDot"></div>
+      <div class="gps-label" id="gpsLabel">GPS</div>
+    </div>
+    <div class="icon-btn" id="settingsBtn" aria-label="Einstellungen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </div>
+  </div>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="map-center-btn" id="centerBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="5"/></svg></div>
+  </div>
+
+  <div class="main" id="mainView"></div>
+
+</div>
+
+<canvas id="confettiCanvas"></canvas>
+
+<div class="overlay" id="overlay"><div class="card" id="triggerCard"></div></div>
+
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div class="drawer-title">Einstellungen</div>
+    <div class="icon-btn" id="closeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
+  </div>
+  <div class="drawer-body">
+
+    <div class="section-label">Offline-Karte</div>
+    <div class="row-sub" style="margin-bottom:8px;">Einmal mit WLAN/Empfang laden — danach funktioniert die Karte auch ohne Netz.</div>
+    <button class="btn-block accent" id="downloadTiles">Karte offline speichern</button>
+    <div class="tile-progress-wrap"><div class="tile-progress-fill" id="tileProgressFill"></div></div>
+    <div class="status-line" id="tileStatus">Noch keine Offline-Kacheln gespeichert.</div>
+
+    <div class="section-label">Testen</div>
+    <div class="row">
+      <div><div class="row-label">Test-Modus</div><div class="row-sub">GPS simulieren statt echtem Standort</div></div>
+      <div class="switch" id="testSwitch"></div>
+    </div>
+    <div id="simControls" style="display:none; padding:14px 0; border-bottom:1px solid var(--border-soft);">
+      <div class="row-sub" style="margin-bottom:4px;">Wegpunkt manuell ansteuern:</div>
+      <div class="sim-row" id="simChips"></div>
+    </div>
+
+    <div class="section-label">Ansage &amp; Sound</div>
+    <div class="row">
+      <div><div class="row-label">Sprachansage</div><div class="row-sub">Automatisch vorlesen bei Wegpunkt</div></div>
+      <div class="switch" id="voiceSwitch"></div>
+    </div>
+    <div class="row">
+      <div><div class="row-label">Sound-Effekte</div><div class="row-sub">Ding bei jeder Station</div></div>
+      <div class="switch" id="soundSwitch"></div>
+    </div>
+    <div class="field" style="margin-top:16px;">
+      <label>Stimme (Deutsch)</label>
+      <select id="voiceSelect"></select>
+    </div>
+
+    <div class="section-label">Route</div>
+    <div class="field">
+      <label>Standard-Trigger-Radius (Meter)</label>
+      <input type="number" id="radiusInput" value="30" min="5" max="200">
+    </div>
+    <div class="field">
+      <label>Route (JSON) — hier deine echte Strecke eintragen</label>
+      <textarea id="routeJson" spellcheck="false"></textarea>
+    </div>
+    <button class="btn-block" id="applyRoute">Route übernehmen</button>
+    <button class="btn-block" id="resetProgress">Fortschritt zurücksetzen</button>
+    <button class="btn-block btn-danger" id="factoryReset">Auf Demo-Route zurücksetzen</button>
+
+    <div class="status-line" id="statusLine"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+
+  /* ============================================================
+     DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
+     type: 'start' | 'mode' | 'info' | 'checkpoint' | 'finish'
+  ============================================================ */
+  const DEMO_ROUTE = {
+    id: "demo-hoffnungsthal",
+    name: "Hoffnungsthal Runde (Demo)",
+    waypoints: [
+      { id:"wp0", name:"Start · Verleihstation", lat:50.9328, lng:7.2011, radius:40, type:"start",
+        instruction:"Willkommen bei ExoRent. Dein Exoskelett ist im Eco-Modus. Folge einfach dem Pfad — ich melde mich an jeder Station.",
+        hypershellAction:"", funfact:"Diese Runde führt dich rund um Hoffnungsthal — leichte Anstiege, ein Aussichtspunkt, ein Waldabschnitt." },
+      { id:"wp1", name:"Fuß des Anstiegs", lat:50.9341, lng:7.2032, radius:30, type:"mode",
+        instruction:"Jetzt beginnt der erste Anstieg. Bitte wechsle in den Bergmodus mit 50 Prozent Power.",
+        hypershellAction:"Hypershell → Bergmodus → 50% Power",
+        funfact:"Der Boden hier besteht aus Grauwacke — typisches Gestein des Bergischen Landes, vor rund 380 Millionen Jahren als Meeresablagerung entstanden." },
+      { id:"wp2", name:"Aussichtspunkt", lat:50.9356, lng:7.2050, radius:35, type:"checkpoint",
+        instruction:"Geschafft. Mach hier ruhig kurz Pause und genieß die Aussicht.",
+        hypershellAction:"", funfact:"Bei klarer Sicht erkennst du von hier die Höhenzüge Richtung Königsforst — eines der größten zusammenhängenden Waldgebiete im Kölner Umland." },
+      { id:"wp3", name:"Kontrast-Moment", lat:50.9349, lng:7.2078, radius:25, type:"mode",
+        instruction:"Jetzt wird's spannend: Schalte die Power komplett aus. Du merkst sofort, was dir das Exoskelett sonst abnimmt.",
+        hypershellAction:"Hypershell → Power AUS", funfact:"" },
+      { id:"wp4", name:"Waldabschnitt", lat:50.9330, lng:7.2095, radius:30, type:"mode",
+        instruction:"Power wieder an — probier jetzt den Hypershell Trail-Modus für den unebenen Waldboden.",
+        hypershellAction:"Hypershell → Trail-Modus",
+        funfact:"Der Königsforst ist Rückzugsgebiet für Wildkatzen — scheue Tiere, deren Spuren man öfter findet als die Tiere selbst." },
+      { id:"wp5", name:"Ziel · Verleihstation", lat:50.9328, lng:7.2011, radius:40, type:"finish",
+        instruction:"Mission erfüllt! Willkommen zurück auf der Erde. Danke, dass du mit ExoRent unterwegs warst.",
+        hypershellAction:"", funfact:"" }
+    ]
+  };
+
+  const TYPE_EMOJI = { start:"🚀", mode:"⚡", checkpoint:"📍", info:"💡", finish:"🏁" };
+  const TYPE_LABEL = { start:"Start", mode:"Modus-Wechsel", checkpoint:"Checkpoint", info:"Info", finish:"Ziel" };
+  const TYPE_XP    = { start:10, mode:25, checkpoint:15, info:10, finish:50 };
+
+  const RANKS = [
+    { min:0,   name:"Bodenpersonal",        emoji:"👨‍🚀" },
+    { min:20,  name:"Kadett",                emoji:"🌱" },
+    { min:60,  name:"Rover-Pilot",           emoji:"🛰️" },
+    { min:120, name:"Mondläufer",            emoji:"🌙" },
+    { min:200, name:"Mars-Anwärter",         emoji:"🔴" },
+    { min:300, name:"Marsianer",             emoji:"👽" },
+    { min:450, name:"Kommandant der Mission",emoji:"⭐" }
+  ];
+
+  const MASCOT_LINES = {
+    start:"Mission Briefing: ",
+    mode:"Neue Order von der Basis: ",
+    checkpoint:"Zwischenstopp erreicht. ",
+    info:"Kurzer Funkspruch: ",
+    finish:"Mission erfüllt. "
+  };
+
+  /* ---------------- State ---------------- */
+  let route = loadRoute() || DEMO_ROUTE;
+  let progress = loadProgress(route.id) || { visited: [], startedAt: null, xp: 0 };
+  let testMode = localStorage.getItem('exotrail_testmode') === '1';
+  let voiceOn = localStorage.getItem('exotrail_voiceon') !== '0';
+  let soundOn = localStorage.getItem('exotrail_soundon') !== '0';
+  let defaultRadius = parseInt(localStorage.getItem('exotrail_radius') || '30');
+  let watchId = null;
+  let voices = [];
+  let selectedVoiceURI = localStorage.getItem('exotrail_voice') || '';
+  let wakeLock = null;
+  let map, routeLine, meMarker, wpMarkers = [];
+
+  const els = {
+    main: document.getElementById('mainView'),
+    gpsDot: document.getElementById('gpsDot'),
+    gpsLabel: document.getElementById('gpsLabel'),
+    overlay: document.getElementById('overlay'),
+    card: document.getElementById('triggerCard'),
+    drawer: document.getElementById('drawer'),
+    toast: document.getElementById('toast'),
+    rankName: document.getElementById('rankName'),
+    xpFill: document.getElementById('xpFill'),
+    mascotAvatar: document.getElementById('mascotAvatar'),
+  };
+
+  /* ---------------- Persistence ---------------- */
+  function loadRoute(){ try{ const r = localStorage.getItem('exotrail_route'); return r ? JSON.parse(r) : null; }catch(e){ return null; } }
+  function saveRoute(r){ localStorage.setItem('exotrail_route', JSON.stringify(r)); }
+  function loadProgress(routeId){ try{ const p = localStorage.getItem('exotrail_progress_'+routeId); return p ? JSON.parse(p) : null; }catch(e){ return null; } }
+  function saveProgress(){ localStorage.setItem('exotrail_progress_'+route.id, JSON.stringify(progress)); }
+
+  /* ---------------- Geo helpers ---------------- */
+  function haversine(lat1,lon1,lat2,lon2){
+    const R=6371000, toRad=d=>d*Math.PI/180;
+    const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+    const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  }
+  function fmtDist(m){ if(m < 1000) return { val: Math.round(m), unit:'m' }; return { val: (m/1000).toFixed(1), unit:'km' }; }
+
+  /* ---------------- Rank / XP ---------------- */
+  function rankFor(xp){
+    let r = RANKS[0];
+    for(const cand of RANKS){ if(xp >= cand.min) r = cand; }
+    return r;
+  }
+  function rankProgress(xp){
+    const idx = RANKS.findIndex(r => r === rankFor(xp));
+    const cur = RANKS[idx], next = RANKS[idx+1];
+    if(!next) return 100;
+    return Math.min(100, Math.round(((xp - cur.min) / (next.min - cur.min)) * 100));
+  }
+  function updateHUD(){
+    const r = rankFor(progress.xp);
+    els.rankName.textContent = r.name;
+    els.mascotAvatar.textContent = r.emoji;
+    els.xpFill.style.width = rankProgress(progress.xp) + '%';
+  }
+
+  /* ---------------- Offline tile cache (IndexedDB) ---------------- */
+  const TILE_DB = 'exotrail_tiles_db';
+  let tileDb = null;
+  function openTileDb(){
+    return new Promise((resolve,reject) => {
+      const req = indexedDB.open(TILE_DB, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('tiles');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function getTile(key){
+    return new Promise(resolve => {
+      if(!tileDb) return resolve(null);
+      const tx = tileDb.transaction('tiles','readonly');
+      const req = tx.objectStore('tiles').get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  }
+  function putTile(key, blob){
+    return new Promise(resolve => {
+      if(!tileDb) return resolve();
+      const tx = tileDb.transaction('tiles','readwrite');
+      tx.objectStore('tiles').put(blob, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  }
+  function countTiles(){
+    return new Promise(resolve => {
+      if(!tileDb) return resolve(0);
+      const tx = tileDb.transaction('tiles','readonly');
+      const req = tx.objectStore('tiles').count();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(0);
+    });
+  }
+
+  const OfflineTileLayer = L.TileLayer.extend({
+    createTile: function(coords, done){
+      const tile = document.createElement('img');
+      tile.alt = '';
+      const key = coords.z + '/' + coords.x + '/' + coords.y;
+      getTile(key).then(blob => {
+        if(blob){
+          tile.src = URL.createObjectURL(blob);
+          done(null, tile);
+        } else {
+          const url = this.getTileUrl(coords);
+          fetch(url).then(r => { if(!r.ok) throw new Error('tile fetch failed'); return r.blob(); })
+            .then(blob2 => { putTile(key, blob2); tile.src = URL.createObjectURL(blob2); done(null, tile); })
+            .catch(err => done(err, tile));
+        }
+      });
+      return tile;
+    }
+  });
+
+  function tileRange(bounds, z){
+    const p1 = L.CRS.EPSG3857.latLngToPoint(bounds.getNorthWest(), z).divideBy(256).floor();
+    const p2 = L.CRS.EPSG3857.latLngToPoint(bounds.getSouthEast(), z).divideBy(256).floor();
+    return { xmin:p1.x, xmax:p2.x, ymin:p1.y, ymax:p2.y };
+  }
+
+  async function downloadOfflineTiles(){
+    const btn = document.getElementById('downloadTiles');
+    const fill = document.getElementById('tileProgressFill');
+    const status = document.getElementById('tileStatus');
+    btn.textContent = 'Lade Kacheln…';
+    btn.disabled = true;
+
+    const latlngs = route.waypoints.map(w => L.latLng(w.lat, w.lng));
+    const bounds = L.latLngBounds(latlngs).pad(0.25);
+    const zooms = [14,15,16,17];
+    let jobs = [];
+    zooms.forEach(z => {
+      const r = tileRange(bounds, z);
+      for(let x=r.xmin; x<=r.xmax; x++) for(let y=r.ymin; y<=r.ymax; y++) jobs.push({z,x,y});
+    });
+
+    let done = 0, failed = 0;
+    const concurrency = 4;
+    let idx = 0;
+    async function worker(){
+      while(idx < jobs.length){
+        const job = jobs[idx++];
+        const key = job.z+'/'+job.x+'/'+job.y;
+        const existing = await getTile(key);
+        if(!existing){
+          try{
+            const url = 'https://tile.openstreetmap.org/'+job.z+'/'+job.x+'/'+job.y+'.png';
+            const r = await fetch(url);
+            if(r.ok){ const blob = await r.blob(); await putTile(key, blob); } else failed++;
+          }catch(e){ failed++; }
+        }
+        done++;
+        fill.style.width = Math.round((done/jobs.length)*100) + '%';
+        status.textContent = done + ' / ' + jobs.length + ' Kacheln geladen' + (failed? ' ('+failed+' fehlgeschlagen)':'');
+      }
+    }
+    await Promise.all(Array.from({length:concurrency}, worker));
+
+    btn.textContent = 'Karte offline speichern';
+    btn.disabled = false;
+    localStorage.setItem('exotrail_tiles_done_'+route.id, '1');
+    toast('Karte ist jetzt offline verfügbar 🗺️');
+    const total = await countTiles();
+    status.textContent = '✅ Bereit für Offline-Nutzung · ' + total + ' Kacheln gespeichert';
+  }
+
+  /* ---------------- Map setup ---------------- */
+  function initMap(){
+    map = L.map('map', { zoomControl:false, attributionControl:true }).setView([route.waypoints[0].lat, route.waypoints[0].lng], 15);
+    new OfflineTileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    routeLine = L.polyline(route.waypoints.map(w=>[w.lat,w.lng]), {
+      color:'#d9a53f', weight:4, opacity:0.55, dashArray:'2 10', lineCap:'round'
+    }).addTo(map);
+
+    renderWpMarkers();
+    fitRoute();
+
+    document.getElementById('centerBtn').onclick = fitRoute;
+  }
+
+  function fitRoute(){
+    if(!map) return;
+    map.fitBounds(routeLine.getBounds().pad(0.15));
+  }
+
+  function renderWpMarkers(){
+    wpMarkers.forEach(m => map.removeLayer(m));
+    wpMarkers = [];
+    const nIdx = nextUnvisitedIndex();
+    route.waypoints.forEach((w,i) => {
+      const done = progress.visited.includes(w.id);
+      const current = i === nIdx;
+      const icon = L.divIcon({
+        className:'', html:
+          '<div style="position:relative;">' +
+            (current ? '<div class="wp-pin-ring"></div>' : '') +
+            '<div class="wp-pin ' + (done?'done':'') + '">' + TYPE_EMOJI[w.type] + '</div>' +
+          '</div>',
+        iconSize:[30,30], iconAnchor:[15,15]
+      });
+      const marker = L.marker([w.lat, w.lng], { icon }).addTo(map);
+      marker.bindPopup('<b>'+esc(w.name)+'</b><br>'+(TYPE_LABEL[w.type]||''));
+      wpMarkers.push(marker);
+    });
+  }
+
+  function updateMeMarker(lat,lng){
+    if(!map) return;
+    if(!meMarker){
+      const icon = L.divIcon({ className:'', html:'<div class="me-dot"></div>', iconSize:[16,16], iconAnchor:[8,8] });
+      meMarker = L.marker([lat,lng], { icon, zIndexOffset:1000 }).addTo(map);
+    } else {
+      meMarker.setLatLng([lat,lng]);
+    }
+  }
+
+  /* ---------------- Rendering (below-map panel) ---------------- */
+  function nextUnvisitedIndex(){ return route.waypoints.findIndex(w => !progress.visited.includes(w.id)); }
+
+  function render(){
+    updateHUD();
+    const nIdx = nextUnvisitedIndex();
+    if(nIdx === -1){ renderFinish(); renderWpMarkers(); return; }
+
+    const target = route.waypoints[nIdx];
+    let html = `<div class="quest-card">
+      <div class="quest-eyebrow">🎯 Nächste Mission</div>
+      <div class="quest-dist" id="distReadout">–<span>m</span></div>
+      <div class="quest-name">weiter zu <b>${esc(target.name)}</b></div>
+    </div>`;
+
+    html += '<div class="chips-scroll">';
+    route.waypoints.forEach((w,i) => {
+      const done = progress.visited.includes(w.id);
+      const current = i === nIdx;
+      html += `<div class="step-chip ${done?'done':''} ${current?'current':''}">
+        <div class="step-chip-icon">${done?'✅':TYPE_EMOJI[w.type]}</div>
+        <div class="step-chip-name">${esc(w.name)}</div>
+        <div class="step-chip-xp">+${TYPE_XP[w.type]||10} XP</div>
+      </div>`;
+    });
+    html += '</div>';
+
+    html += `<button class="fallback-btn" id="fallbackBtn">GPS zickt rum? Hier manuell bestätigen 👀</button>`;
+
+    els.main.innerHTML = html;
+    document.getElementById('fallbackBtn').onclick = () => {
+      if(confirm('Wegpunkt "'+target.name+'" wirklich manuell bestätigen?')) triggerWaypoint(target);
+    };
+    updateDistanceDisplay(target);
+  }
+
+  function updateDistanceDisplay(target){
+    const el = document.getElementById('distReadout');
+    if(!el || !window.__lastPos) return;
+    const d = haversine(window.__lastPos.lat, window.__lastPos.lng, target.lat, target.lng);
+    const f = fmtDist(d);
+    el.innerHTML = f.val + '<span>' + f.unit + '</span>';
+  }
+
+  function renderFinish(){
+    const elapsed = progress.startedAt ? Math.round((Date.now()-progress.startedAt)/60000) : 0;
+    const rank = rankFor(progress.xp);
+    els.main.innerHTML = `<div class="finish">
+      <div class="finish-mascot">${rank.emoji}</div>
+      <div class="finish-eyebrow">Mission abgeschlossen</div>
+      <div class="finish-title">Zurück auf der Erde! 🏁</div>
+      <div class="finish-rank">Rang erreicht: ${rank.name}</div>
+      <div class="stats">
+        <div class="stat"><div class="stat-val">${route.waypoints.length}</div><div class="stat-label">Stationen</div></div>
+        <div class="stat"><div class="stat-val">${progress.xp}</div><div class="stat-label">XP gesammelt</div></div>
+        <div class="stat"><div class="stat-val">${elapsed}</div><div class="stat-label">Minuten</div></div>
+        <div class="stat"><div class="stat-val">35€</div><div class="stat-label">Für den Mars</div></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;" id="restartBtn">Neue Runde starten</button>
+    </div>`;
+    document.getElementById('restartBtn').onclick = () => {
+      progress = { visited: [], startedAt: Date.now(), xp: 0 };
+      saveProgress(); render();
+    };
+  }
+
+  function esc(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  /* ---------------- Waypoint trigger ---------------- */
+  let overlayOpen = false;
+  function triggerWaypoint(wp){
+    if(overlayOpen) return;
+    if(progress.visited.includes(wp.id)) return;
+    if(!progress.startedAt) progress.startedAt = Date.now();
+    progress.visited.push(wp.id);
+    const xpGain = TYPE_XP[wp.type] || 10;
+    progress.xp += xpGain;
+    saveProgress();
+    updateHUD();
+    renderWpMarkers();
+
+    overlayOpen = true;
+    vibrate(wp.type);
+    if(soundOn) playChime();
+    burstConfetti();
+
+    const hasAction = !!wp.hypershellAction;
+    const hasFact = !!wp.funfact;
+    const rank = rankFor(progress.xp);
+
+    els.card.innerHTML = `
+      <div class="mascot-bubble">
+        <div class="mascot-face">${rank.emoji}</div>
+        <div class="bubble">${MASCOT_LINES[wp.type]||''}${esc(wp.name)}</div>
+      </div>
+      <div class="xp-pop">✨ +${xpGain} XP</div>
+      <div class="card-title">${esc(wp.instruction)}</div>
+      ${hasAction ? `<div class="action-box"><div class="action-box-icon">⚡</div><div class="action-box-text">${esc(wp.hypershellAction)}</div></div>` : ''}
+      ${hasFact ? `<div class="funfact"><div class="funfact-label">💡 Fun Fact</div>${esc(wp.funfact)}</div>` : ''}
+      <div class="card-actions">
+        <button class="btn btn-primary" id="cardOk">Weiter geht's! 🚀</button>
+        <button class="btn-ghost" id="cardReplay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
+      </div>`;
+
+    els.overlay.classList.add('show');
+    document.getElementById('cardOk').onclick = closeOverlay;
+    document.getElementById('cardReplay').onclick = () => speak(wp.instruction + (hasFact?'. '+wp.funfact:''));
+    speak(wp.instruction + (hasFact ? '. ' + wp.funfact : ''));
+  }
+
+  function closeOverlay(){
+    els.overlay.classList.remove('show');
+    overlayOpen = false;
+    speechSynthesis.cancel();
+    render();
+  }
+
+  function vibrate(type){
+    if(!navigator.vibrate) return;
+    if(type==='mode') navigator.vibrate([80,60,80]);
+    else if(type==='finish') navigator.vibrate([100,50,100,50,200]);
+    else navigator.vibrate(80);
+  }
+
+  /* ---------------- Sound chime (synth, kein Audiofile nötig) ---------------- */
+  let actx = null;
+  function playChime(){
+    try{
+      if(!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      const notes = [880, 1175];
+      notes.forEach((f,i) => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        o.connect(g); g.connect(actx.destination);
+        const t0 = actx.currentTime + i*0.09;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.15, t0+0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0+0.35);
+        o.start(t0); o.stop(t0+0.4);
+      });
+    }catch(e){}
+  }
+
+  /* ---------------- Confetti (vanilla canvas) ---------------- */
+  const confettiCanvas = document.getElementById('confettiCanvas');
+  const cctx = confettiCanvas.getContext('2d');
+  function resizeConfetti(){ confettiCanvas.width = innerWidth; confettiCanvas.height = innerHeight; }
+  window.addEventListener('resize', resizeConfetti); resizeConfetti();
+  function burstConfetti(){
+    const colors = ['#d9a53f','#f0be5c','#6fd9a8','#ff8f66','#6fb3d9'];
+    const N = 60;
+    const particles = Array.from({length:N}, () => ({
+      x: confettiCanvas.width/2 + (Math.random()-0.5)*80,
+      y: confettiCanvas.height*0.35,
+      vx: (Math.random()-0.5)*9,
+      vy: -Math.random()*7-3,
+      size: Math.random()*6+4,
+      color: colors[Math.floor(Math.random()*colors.length)],
+      rot: Math.random()*Math.PI*2,
+      vr: (Math.random()-0.5)*0.3,
+      life: 0
+    }));
+    let frame = 0;
+    function tick(){
+      frame++;
+      cctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+      let alive = false;
+      particles.forEach(p => {
+        p.vy += 0.22; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life++;
+        if(p.y < confettiCanvas.height+20) alive = true;
+        cctx.save();
+        cctx.translate(p.x,p.y); cctx.rotate(p.rot);
+        cctx.fillStyle = p.color;
+        cctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
+        cctx.restore();
+      });
+      if(alive && frame < 140) requestAnimationFrame(tick);
+      else cctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+    }
+    tick();
+  }
+
+  /* ---------------- Text-to-Speech ---------------- */
+  function loadVoices(){
+    voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('de'));
+    const sel = document.getElementById('voiceSelect');
+    sel.innerHTML = voices.map(v => `<option value="${v.voiceURI}">${v.name}</option>`).join('');
+    if(selectedVoiceURI) sel.value = selectedVoiceURI;
+  }
+  if('speechSynthesis' in window){ speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); }
+  function speak(text){
+    if(!voiceOn || !('speechSynthesis' in window) || !text) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'de-DE';
+    const v = voices.find(v => v.voiceURI === selectedVoiceURI);
+    if(v) u.voice = v;
+    u.rate = 0.98;
+    speechSynthesis.speak(u);
+  }
+
+  /* ---------------- GPS: live ---------------- */
+  function checkProximity(lat,lng){
+    window.__lastPos = { lat, lng };
+    updateMeMarker(lat,lng);
+    const nIdx = nextUnvisitedIndex();
+    if(nIdx === -1) return;
+    const target = route.waypoints[nIdx];
+    const d = haversine(lat,lng,target.lat,target.lng);
+    updateDistanceDisplay(target);
+    const r = target.radius || defaultRadius;
+    if(d <= r) triggerWaypoint(target);
+  }
+
+  function startLiveGPS(){
+    if(!('geolocation' in navigator)){ toast('Kein GPS auf diesem Gerät verfügbar'); return; }
+    els.gpsLabel.textContent = 'GPS';
+    watchId = navigator.geolocation.watchPosition(
+      pos => { els.gpsDot.className = 'gps-dot live'; checkProximity(pos.coords.latitude, pos.coords.longitude); },
+      err => { toast('GPS-Fehler: ' + err.message); },
+      { enableHighAccuracy:true, maximumAge:2000, timeout:15000 }
+    );
+  }
+  function stopLiveGPS(){ if(watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; } }
+
+  /* ---------------- Test mode ---------------- */
+  function buildSimChips(){
+    const wrap = document.getElementById('simChips');
+    wrap.innerHTML = route.waypoints.map((w,i) => `<div class="chip" data-i="${i}">${TYPE_EMOJI[w.type]} ${esc(w.name)}</div>`).join('');
+    wrap.querySelectorAll('.chip').forEach(chip => {
+      chip.onclick = () => {
+        const w = route.waypoints[parseInt(chip.dataset.i)];
+        checkProximity(w.lat, w.lng);
+        if(map) map.panTo([w.lat, w.lng]);
+      };
+    });
+  }
+  function setTestMode(on){
+    testMode = on;
+    localStorage.setItem('exotrail_testmode', on ? '1':'0');
+    document.getElementById('testSwitch').classList.toggle('on', on);
+    document.getElementById('simControls').style.display = on ? 'block' : 'none';
+    els.gpsDot.className = 'gps-dot' + (on ? ' sim' : '');
+    els.gpsLabel.textContent = on ? 'SIM' : 'GPS';
+    if(on){ stopLiveGPS(); } else { startLiveGPS(); }
+  }
+
+  /* ---------------- Settings drawer wiring ---------------- */
+  const drawerEl = document.getElementById('drawer');
+  document.getElementById('settingsBtn').onclick = async () => {
+    document.getElementById('routeJson').value = JSON.stringify(route, null, 2);
+    document.getElementById('radiusInput').value = defaultRadius;
+    document.getElementById('testSwitch').classList.toggle('on', testMode);
+    document.getElementById('simControls').style.display = testMode ? 'block':'none';
+    document.getElementById('voiceSwitch').classList.toggle('on', voiceOn);
+    document.getElementById('soundSwitch').classList.toggle('on', soundOn);
+    buildSimChips();
+    const total = await countTiles();
+    document.getElementById('tileStatus').textContent = total > 0
+      ? '✅ ' + total + ' Kacheln bereits offline gespeichert'
+      : 'Noch keine Offline-Kacheln gespeichert.';
+    document.getElementById('statusLine').textContent =
+      'Route: ' + route.id + ' · Besucht: ' + progress.visited.length + '/' + route.waypoints.length + ' · XP: ' + progress.xp;
+    drawerEl.classList.add('open');
+  };
+  document.getElementById('closeDrawer').onclick = () => drawerEl.classList.remove('open');
+  document.getElementById('downloadTiles').onclick = downloadOfflineTiles;
+
+  document.getElementById('testSwitch').onclick = function(){ setTestMode(!testMode); };
+  document.getElementById('voiceSwitch').onclick = function(){ voiceOn = !voiceOn; localStorage.setItem('exotrail_voiceon', voiceOn?'1':'0'); this.classList.toggle('on', voiceOn); };
+  document.getElementById('soundSwitch').onclick = function(){ soundOn = !soundOn; localStorage.setItem('exotrail_soundon', soundOn?'1':'0'); this.classList.toggle('on', soundOn); };
+  document.getElementById('voiceSelect').onchange = function(){ selectedVoiceURI = this.value; localStorage.setItem('exotrail_voice', selectedVoiceURI); };
+  document.getElementById('radiusInput').onchange = function(){ defaultRadius = parseInt(this.value) || 30; localStorage.setItem('exotrail_radius', defaultRadius); };
+
+  document.getElementById('applyRoute').onclick = function(){
+    try{
+      const parsed = JSON.parse(document.getElementById('routeJson').value);
+      if(!parsed.waypoints || !parsed.id) throw new Error('Route braucht "id" und "waypoints"');
+      route = parsed;
+      saveRoute(route);
+      progress = loadProgress(route.id) || { visited: [], startedAt:null, xp:0 };
+      toast('Route übernommen');
+      buildSimChips();
+      if(map){ routeLine.setLatLngs(route.waypoints.map(w=>[w.lat,w.lng])); renderWpMarkers(); fitRoute(); }
+      render();
+    }catch(e){ toast('Fehler im JSON: ' + e.message); }
+  };
+  document.getElementById('resetProgress').onclick = function(){
+    if(!confirm('Fortschritt dieser Route zurücksetzen?')) return;
+    progress = { visited: [], startedAt: null, xp: 0 };
+    saveProgress(); render(); renderWpMarkers(); toast('Fortschritt zurückgesetzt');
+  };
+  document.getElementById('factoryReset').onclick = function(){
+    if(!confirm('Zur Demo-Route zurücksetzen? Eigene Route geht verloren.')) return;
+    localStorage.removeItem('exotrail_route');
+    route = DEMO_ROUTE;
+    progress = { visited: [], startedAt: null, xp: 0 };
+    saveProgress(); render();
+    if(map){ routeLine.setLatLngs(route.waypoints.map(w=>[w.lat,w.lng])); renderWpMarkers(); fitRoute(); }
+    toast('Demo-Route geladen');
+  };
+
+  function toast(msg){ els.toast.textContent = msg; els.toast.classList.add('show'); setTimeout(()=> els.toast.classList.remove('show'), 2200); }
+
+  /* ---------------- Wake lock ---------------- */
+  async function requestWakeLock(){ try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
+  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') requestWakeLock(); });
+
+  /* ---------------- Init ---------------- */
+  openTileDb().then(db => { tileDb = db; initMap(); render(); }).catch(() => { initMap(); render(); });
+  requestWakeLock();
+  if(testMode){ els.gpsDot.className = 'gps-dot sim'; els.gpsLabel.textContent = 'SIM'; }
+  else { startLiveGPS(); }
+
+})();
+</script>
+</body>
+</html>
