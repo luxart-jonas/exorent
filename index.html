@@ -117,9 +117,21 @@
   .leaflet-container{ background:#141a15; font-family:var(--sans); }
   .leaflet-control-attribution{ background:rgba(12,18,16,0.7)!important; color:var(--text-faint)!important; font-size:9px!important; }
   .leaflet-control-attribution a{ color:var(--text-dim)!important; }
-  .wp-pin{ display:flex; align-items:center; justify-content:center; font-size:18px; filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
-  .wp-pin.done{ opacity:.55; }
-  .wp-pin-ring{ position:absolute; inset:-4px; border-radius:50%; border:2px solid var(--gold-bright); animation:ringpulse 1.8s infinite; }
+  .wp-pin{
+    display:flex; align-items:center; justify-content:center; font-size:26px;
+    width:44px; height:44px; border-radius:50%;
+    background:var(--bg-elevated); border:2.5px solid var(--gold);
+    filter:drop-shadow(0 3px 7px rgba(0,0,0,.6));
+  }
+  .wp-pin.done{ opacity:.65; border-color:rgba(111,217,168,0.5); }
+  .wp-pin-ring{ position:absolute; inset:-6px; border-radius:50%; border:2px solid var(--gold-bright); animation:ringpulse 1.8s infinite; }
+  .wp-tooltip{
+    background:var(--bg-elevated)!important; color:var(--text)!important;
+    border:1px solid var(--border)!important; border-radius:9px!important;
+    font-size:12px!important; font-weight:800!important; padding:5px 10px!important;
+    box-shadow:0 3px 10px rgba(0,0,0,.45)!important;
+  }
+  .wp-tooltip::before{ border-top-color:var(--border)!important; }
   @keyframes ringpulse{ 0%{ transform:scale(.8); opacity:1; } 100%{ transform:scale(1.6); opacity:0; } }
   .me-dot{ width:16px; height:16px; border-radius:50%; background:var(--sky); border:3px solid #fff; box-shadow:0 0 0 4px rgba(111,179,217,0.3); }
 
@@ -141,14 +153,14 @@
   .chips-scroll{ display:flex; gap:8px; overflow-x:auto; padding:2px 2px 8px; margin-bottom:6px; }
   .chips-scroll::-webkit-scrollbar{ display:none; }
   .step-chip{
-    flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:6px;
-    width:64px; padding:10px 6px; border-radius:16px; background:var(--bg-panel);
-    border:1px solid var(--border-soft); opacity:.5;
+    flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:7px;
+    width:86px; padding:14px 8px; border-radius:18px; background:var(--bg-panel);
+    border:1px solid var(--border-soft); opacity:.55;
   }
-  .step-chip.current{ opacity:1; border-color:var(--gold); background:var(--bg-elevated); box-shadow:0 0 0 1px var(--gold); }
-  .step-chip.done{ opacity:.85; border-color:rgba(111,217,168,0.35); }
-  .step-chip-icon{ font-size:20px; }
-  .step-chip-name{ font-size:10px; text-align:center; line-height:1.2; color:var(--text-dim); }
+  .step-chip.current{ opacity:1; border-color:var(--gold); background:var(--bg-elevated); box-shadow:0 0 0 2px var(--gold); transform:scale(1.05); }
+  .step-chip.done{ opacity:.9; border-color:rgba(111,217,168,0.4); }
+  .step-chip-icon{ font-size:30px; }
+  .step-chip-name{ font-size:11.5px; text-align:center; line-height:1.25; color:var(--text-dim); font-weight:600; }
   .step-chip.current .step-chip-name{ color:var(--text); font-weight:700; }
   .step-chip-xp{ font-family:var(--mono); font-size:9px; color:var(--gold-bright); }
 
@@ -249,6 +261,15 @@
   .tile-progress-wrap{ height:8px; border-radius:5px; background:var(--bg-elevated); overflow:hidden; margin-top:10px; }
   .tile-progress-fill{ height:100%; background:linear-gradient(90deg, var(--sky), var(--mint-bright)); width:0%; transition:width .2s; }
 
+  .rec-item{ background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:16px; padding:13px 15px; margin-top:10px; }
+  .rec-item-top{ display:flex; align-items:center; gap:9px; }
+  .rec-emoji{ font-size:20px; }
+  .rec-name{ font-weight:700; font-size:14px; flex:1; }
+  .rec-coords{ font-family:var(--mono); font-size:10.5px; color:var(--text-faint); margin-top:5px; }
+  .rec-actions{ display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; }
+  .rec-actions button{ background:var(--bg-elevated); border:1px solid var(--border-soft); color:var(--text-dim); border-radius:9px; padding:7px 11px; font-size:12.5px; cursor:pointer; font-family:var(--sans); }
+  .rec-actions button:active{ background:var(--bg-panel); }
+
   .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--bg-elevated); border:1px solid var(--border); color:var(--text); padding:12px 20px; border-radius:14px; font-size:13px; z-index:950; opacity:0; pointer-events:none; transition:all .3s; font-weight:600; }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
@@ -289,6 +310,7 @@
 <canvas id="confettiCanvas"></canvas>
 
 <div class="overlay" id="overlay"><div class="card" id="triggerCard"></div></div>
+<div class="overlay" id="recordOverlay"><div class="card" id="recordCard"></div></div>
 
 <div class="drawer" id="drawer">
   <div class="drawer-head">
@@ -327,7 +349,16 @@
       <select id="voiceSelect"></select>
     </div>
 
-    <div class="section-label">Route</div>
+    <div class="section-label">Route aufnehmen 📍</div>
+    <div class="row-sub" style="margin-bottom:12px;">Lauf die Strecke ab. An jedem Punkt "Hier markieren" antippen und Text eintippen — die Liste baut deine Route live auf.</div>
+    <button class="btn-block accent" id="markHereBtn">📍 Hier markieren</button>
+    <div id="recordList"></div>
+    <div id="recordActionsWrap" style="display:none; flex-direction:column; gap:8px; margin-top:12px;">
+      <button class="btn-block" id="finishRecording">✅ Aufnahme als Route speichern</button>
+      <button class="btn-block btn-danger" id="clearRecording">Aufnahme verwerfen</button>
+    </div>
+
+    <div class="section-label">Route (JSON)</div>
     <div class="field">
       <label>Standard-Trigger-Radius (Meter)</label>
       <input type="number" id="radiusInput" value="30" min="5" max="200">
@@ -415,6 +446,8 @@
   let selectedVoiceURI = localStorage.getItem('exotrail_voice') || '';
   let wakeLock = null;
   let map, routeLine, meMarker, wpMarkers = [];
+  let recording = loadRecording();
+  let editingRecordIndex = null;
 
   const els = {
     main: document.getElementById('mainView'),
@@ -434,6 +467,8 @@
   function saveRoute(r){ localStorage.setItem('exotrail_route', JSON.stringify(r)); }
   function loadProgress(routeId){ try{ const p = localStorage.getItem('exotrail_progress_'+routeId); return p ? JSON.parse(p) : null; }catch(e){ return null; } }
   function saveProgress(){ localStorage.setItem('exotrail_progress_'+route.id, JSON.stringify(progress)); }
+  function loadRecording(){ try{ const r = localStorage.getItem('exotrail_recording_draft'); return r ? JSON.parse(r) : []; }catch(e){ return []; } }
+  function saveRecordingDraft(){ localStorage.setItem('exotrail_recording_draft', JSON.stringify(recording)); }
 
   /* ---------------- Geo helpers ---------------- */
   function haversine(lat1,lon1,lat2,lon2){
@@ -609,9 +644,10 @@
             (current ? '<div class="wp-pin-ring"></div>' : '') +
             '<div class="wp-pin ' + (done?'done':'') + '">' + TYPE_EMOJI[w.type] + '</div>' +
           '</div>',
-        iconSize:[30,30], iconAnchor:[15,15]
+        iconSize:[44,44], iconAnchor:[22,22]
       });
       const marker = L.marker([w.lat, w.lng], { icon }).addTo(map);
+      marker.bindTooltip(esc(w.name), { permanent:true, direction:'top', offset:[0,-26], className:'wp-tooltip' });
       marker.bindPopup('<b>'+esc(w.name)+'</b><br>'+(TYPE_LABEL[w.type]||''));
       wpMarkers.push(marker);
     });
@@ -884,6 +920,7 @@
     document.getElementById('voiceSwitch').classList.toggle('on', voiceOn);
     document.getElementById('soundSwitch').classList.toggle('on', soundOn);
     buildSimChips();
+    buildRecordList();
     const total = await countTiles();
     document.getElementById('tileStatus').textContent = total > 0
       ? '✅ ' + total + ' Kacheln bereits offline gespeichert'
@@ -894,6 +931,41 @@
   };
   document.getElementById('closeDrawer').onclick = () => drawerEl.classList.remove('open');
   document.getElementById('downloadTiles').onclick = downloadOfflineTiles;
+
+  document.getElementById('markHereBtn').onclick = async () => {
+    const btn = document.getElementById('markHereBtn');
+    btn.disabled = true; btn.textContent = 'GPS wird geortet…';
+    try{
+      const pos = await getCurrentPositionAsync();
+      openRecordForm({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
+    }catch(e){ toast('GPS-Fehler: ' + e.message); }
+    btn.disabled = false; btn.textContent = '📍 Hier markieren';
+  };
+
+  document.getElementById('finishRecording').onclick = () => {
+    if(recording.length === 0) return;
+    const name = prompt('Name für diese Route:', route.name || 'Meine Route');
+    if(name === null) return;
+    const newRoute = { id: 'route-'+Date.now(), name: name || 'Meine Route', waypoints: recording.map(w => ({...w})) };
+    route = newRoute;
+    saveRoute(route);
+    progress = { visited: [], startedAt: null, xp: 0 };
+    saveProgress();
+    recording = [];
+    saveRecordingDraft();
+    buildRecordList();
+    if(map){ routeLine.setLatLngs(route.waypoints.map(w=>[w.lat,w.lng])); renderWpMarkers(); fitRoute(); }
+    render();
+    document.getElementById('routeJson').value = JSON.stringify(route, null, 2);
+    toast('Route gespeichert · ' + route.waypoints.length + ' Punkte 🎉');
+  };
+
+  document.getElementById('clearRecording').onclick = () => {
+    if(!confirm('Aufnahme wirklich verwerfen? Alle markierten Punkte gehen verloren.')) return;
+    recording = [];
+    saveRecordingDraft();
+    buildRecordList();
+  };
 
   document.getElementById('testSwitch').onclick = function(){ setTestMode(!testMode); };
   document.getElementById('voiceSwitch').onclick = function(){ voiceOn = !voiceOn; localStorage.setItem('exotrail_voiceon', voiceOn?'1':'0'); this.classList.toggle('on', voiceOn); };
@@ -930,6 +1002,115 @@
   };
 
   function toast(msg){ els.toast.textContent = msg; els.toast.classList.add('show'); setTimeout(()=> els.toast.classList.remove('show'), 2200); }
+
+  /* ---------------- Route-Aufnahme (Recorder) ---------------- */
+  function getCurrentPositionAsync(){
+    return new Promise((resolve,reject) => {
+      if(!('geolocation' in navigator)) return reject(new Error('Kein GPS verfügbar'));
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+    });
+  }
+
+  function buildRecordList(){
+    const wrap = document.getElementById('recordList');
+    const actionsWrap = document.getElementById('recordActionsWrap');
+    if(!wrap) return;
+    wrap.innerHTML = recording.map((w,i) => `
+      <div class="rec-item" data-idx="${i}">
+        <div class="rec-item-top"><span class="rec-emoji">${TYPE_EMOJI[w.type]||'📍'}</span><span class="rec-name">${i+1}. ${esc(w.name)}</span></div>
+        <div class="rec-coords">${w.lat.toFixed(5)}, ${w.lng.toFixed(5)} · ${TYPE_LABEL[w.type]||''} · ${w.radius||defaultRadius}m Radius</div>
+        <div class="rec-actions">
+          <button data-act="up">↑</button>
+          <button data-act="down">↓</button>
+          <button data-act="edit">✏️ Bearbeiten</button>
+          <button data-act="del">🗑️</button>
+        </div>
+      </div>`).join('');
+    if(actionsWrap) actionsWrap.style.display = recording.length ? 'flex' : 'none';
+
+    wrap.querySelectorAll('.rec-item').forEach(item => {
+      const i = parseInt(item.dataset.idx);
+      item.querySelector('[data-act="up"]').onclick = () => { if(i>0){ [recording[i-1],recording[i]]=[recording[i],recording[i-1]]; saveRecordingDraft(); buildRecordList(); } };
+      item.querySelector('[data-act="down"]').onclick = () => { if(i<recording.length-1){ [recording[i+1],recording[i]]=[recording[i],recording[i+1]]; saveRecordingDraft(); buildRecordList(); } };
+      item.querySelector('[data-act="edit"]').onclick = () => openRecordForm({ lat:recording[i].lat, lng:recording[i].lng }, i);
+      item.querySelector('[data-act="del"]').onclick = () => { if(confirm('Punkt "'+recording[i].name+'" löschen?')){ recording.splice(i,1); saveRecordingDraft(); buildRecordList(); } };
+    });
+  }
+
+  function openRecordForm(posData, existingIndex){
+    editingRecordIndex = (existingIndex === undefined) ? null : existingIndex;
+    const w = editingRecordIndex !== null ? recording[editingRecordIndex] : {
+      name:'', type:'checkpoint', instruction:'', hypershellAction:'', funfact:'',
+      radius: defaultRadius, lat: posData.lat, lng: posData.lng
+    };
+    const accuracyText = posData.accuracy ? Math.round(posData.accuracy)+'m Genauigkeit' : '';
+
+    document.getElementById('recordCard').innerHTML = `
+      <div class="card-eyebrow" style="margin-bottom:10px;">📍 ${w.lat.toFixed(5)}, ${w.lng.toFixed(5)} ${accuracyText?('· '+accuracyText):''}</div>
+      <div class="card-title" style="font-size:19px; margin-bottom:14px;">${editingRecordIndex!==null?'Punkt bearbeiten':'Neuer Punkt'}</div>
+
+      <div class="field"><label>Name</label><input id="rf_name" type="text" placeholder="z.B. Fuß des Anstiegs" value="${esc(w.name)}"></div>
+
+      <div class="field"><label>Typ</label>
+        <select id="rf_type">
+          ${Object.keys(TYPE_EMOJI).map(t => `<option value="${t}" ${w.type===t?'selected':''}>${TYPE_EMOJI[t]} ${TYPE_LABEL[t]}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="field"><label>Ansage / Anweisung</label><textarea id="rf_instruction" style="min-height:80px;" placeholder="Was soll die App hier sagen?">${esc(w.instruction)}</textarea></div>
+
+      <div class="field"><label>Hypershell-Aktion (optional)</label><input id="rf_action" type="text" placeholder="z.B. Bergmodus → 50% Power" value="${esc(w.hypershellAction)}"></div>
+
+      <div class="field"><label>Fun Fact (optional)</label><textarea id="rf_funfact" style="min-height:60px;" placeholder="Wissenswertes zu diesem Ort">${esc(w.funfact)}</textarea></div>
+
+      <div class="field"><label>Trigger-Radius (Meter)</label><input id="rf_radius" type="number" min="5" max="200" value="${w.radius||defaultRadius}"></div>
+
+      <div class="card-actions">
+        <button class="btn btn-primary" id="rf_save">Speichern</button>
+        <button class="btn-ghost" id="rf_recheck" title="Position neu orten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
+      </div>
+      <button class="fallback-btn" id="rf_cancel" style="margin-top:10px;">Abbrechen</button>
+    `;
+
+    document.getElementById('recordOverlay').classList.add('show');
+
+    document.getElementById('rf_recheck').onclick = async () => {
+      try{
+        const pos = await getCurrentPositionAsync();
+        w.lat = pos.coords.latitude; w.lng = pos.coords.longitude;
+        openRecordForm({ lat:w.lat, lng:w.lng, accuracy:pos.coords.accuracy }, editingRecordIndex);
+        toast('Position aktualisiert');
+      }catch(e){ toast('GPS-Fehler: '+e.message); }
+    };
+
+    document.getElementById('rf_cancel').onclick = closeRecordForm;
+
+    document.getElementById('rf_save').onclick = () => {
+      const name = document.getElementById('rf_name').value.trim();
+      if(!name){ toast('Bitte einen Namen eingeben'); return; }
+      const entry = {
+        id: (editingRecordIndex !== null && recording[editingRecordIndex].id) ? recording[editingRecordIndex].id : 'wp_'+Date.now(),
+        name,
+        lat: w.lat, lng: w.lng,
+        radius: parseInt(document.getElementById('rf_radius').value) || defaultRadius,
+        type: document.getElementById('rf_type').value,
+        instruction: document.getElementById('rf_instruction').value.trim(),
+        hypershellAction: document.getElementById('rf_action').value.trim(),
+        funfact: document.getElementById('rf_funfact').value.trim()
+      };
+      if(editingRecordIndex !== null) recording[editingRecordIndex] = entry;
+      else recording.push(entry);
+      saveRecordingDraft();
+      buildRecordList();
+      closeRecordForm();
+      toast(editingRecordIndex !== null ? 'Punkt aktualisiert' : 'Punkt hinzugefügt · '+recording.length+' insgesamt');
+    };
+  }
+
+  function closeRecordForm(){
+    document.getElementById('recordOverlay').classList.remove('show');
+    editingRecordIndex = null;
+  }
 
   /* ---------------- Wake lock ---------------- */
   async function requestWakeLock(){ try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
