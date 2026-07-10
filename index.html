@@ -7,16 +7,22 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <!--
   ============================================================
-  EXOTRAIL NAVI v2 — Prototyp für ExoRent
+  EXOTRAIL NAVI — Prototyp für ExoRent
+  Aktuelle Version: siehe APP_VERSION im <script> unten,
+  und sichtbar unten in den Einstellungen.
   ============================================================
-  NEU in v2:
-  - Echte OpenStreetMap-Karte (Leaflet) statt reiner Liste
-  - Offline-Kacheln: einmal an der Verleihstation (mit WLAN) auf
-    "Karte offline speichern" tippen -> Kacheln landen in IndexedDB
-    -> funktionieren danach ganz ohne Empfang im Wald
-  - Gamification: XP, Level/Rang (Mars-Theme passend zu deiner
-    "35€ auf den Mars"-Kampagne), Konfetti, Sound-Ding bei jeder
-    Station, Mascot-Sprechblase (Astronaut)
+  CHANGELOG
+  v0.3.0 - Erste Version: Trail-Spine, GPS-Geofencing, TTS, Test-Modus
+  v0.4.0 - Echte OSM-Karte (Leaflet), Offline-Kacheln, Gamification
+           (XP/Ränge/Konfetti/Sound), größere Wegpunkt-Pins & Chips
+  v0.5.0 - Route-Recorder in den Einstellungen ("Hier markieren")
+  v0.5.1 - Standort-Button (echte Position statt nur Routen-Zoom)
+  v0.6.0 - Formular öffnet sofort (nicht mehr GPS-abhängig),
+           Koordinaten manuell editierbar, GPS läuft im Hintergrund
+  v0.6.1 - BUGFIX: Eingabefenster lag hinter dem Einstellungen-Menü
+           (z-index) und war dadurch unsichtbar. Menü schließt sich
+           jetzt automatisch beim Öffnen des Formulars.
+  ============================================================
 
   Einrichtung:
   1. Datei in "index.html" umbenennen, auf GitHub Pages hosten
@@ -180,6 +186,7 @@
     opacity:0; pointer-events:none; transition:opacity .35s;
   }
   .overlay.show{ opacity:1; pointer-events:auto; }
+  #recordOverlay{ z-index:950; }
   .card{
     width:100%; max-width:520px; max-height:88vh; overflow-y:auto;
     background:var(--bg-panel); border:1px solid var(--border);
@@ -315,7 +322,7 @@
 
 <div class="drawer" id="drawer">
   <div class="drawer-head">
-    <div class="drawer-title">Einstellungen</div>
+    <div class="drawer-title">Einstellungen <span style="font-family:var(--mono); font-size:11px; color:var(--text-faint); font-weight:400;" id="versionTag"></span></div>
     <div class="icon-btn" id="closeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
   </div>
   <div class="drawer-body">
@@ -381,6 +388,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function(){
+
+  const APP_VERSION = "0.6.1";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -1096,6 +1105,7 @@
     `;
 
     document.getElementById('recordOverlay').classList.add('show');
+    drawerEl.classList.remove('open');
 
     if(posData.pending){
       getCurrentPositionAsync().then(pos => {
@@ -1156,6 +1166,7 @@
   function closeRecordForm(){
     document.getElementById('recordOverlay').classList.remove('show');
     editingRecordIndex = null;
+    drawerEl.classList.add('open');
   }
 
   /* ---------------- Wake lock ---------------- */
@@ -1163,10 +1174,12 @@
   document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') requestWakeLock(); });
 
   /* ---------------- Init ---------------- */
+  document.getElementById('versionTag').textContent = 'v' + APP_VERSION;
   openTileDb().then(db => { tileDb = db; initMap(); render(); }).catch(() => { initMap(); render(); });
   requestWakeLock();
   if(testMode){ els.gpsDot.className = 'gps-dot sim'; els.gpsLabel.textContent = 'SIM'; }
   else { startLiveGPS(); }
+  setTimeout(() => toast('ExoTrail v' + APP_VERSION + ' geladen'), 400);
 
 })();
 </script>
