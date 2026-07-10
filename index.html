@@ -27,6 +27,11 @@
            ergänzen) und löschen. Aufnahme-Fortschritt ist jetzt an
            eine konkrete Route gebunden und übersteht das Schließen
            der App zwischen zwei Aufnahme-Sitzungen.
+  v0.7.1 - BUGFIX: Ankunfts-Fenster (Konfetti/XP) lag hinter dem
+           Einstellungen-Menü und war unsichtbar — Fortschritt wurde
+           dabei trotzdem im Hintergrund gespeichert (führte dazu,
+           dass Routen ungesehen sofort als "abgeschlossen" galten).
+           Menü schließt sich jetzt automatisch bei jeder Ankunft.
   ============================================================
 
   Einrichtung:
@@ -185,13 +190,12 @@
 
   /* ---------- Trigger overlay ---------- */
   .overlay{
-    position:fixed; inset:0; z-index:800;
+    position:fixed; inset:0; z-index:950;
     background:rgba(6,9,7,0.93); backdrop-filter:blur(6px);
     display:flex; align-items:flex-end; justify-content:center;
     opacity:0; pointer-events:none; transition:opacity .35s;
   }
   .overlay.show{ opacity:1; pointer-events:auto; }
-  #recordOverlay{ z-index:950; }
   .card{
     width:100%; max-width:520px; max-height:88vh; overflow-y:auto;
     background:var(--bg-panel); border:1px solid var(--border);
@@ -406,7 +410,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.7.0";
+  const APP_VERSION = "0.7.1";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -890,6 +894,7 @@
     updateHUD();
     renderWpMarkers();
 
+    drawerEl.classList.remove('open');
     overlayOpen = true;
     vibrate(wp.type);
     if(soundOn) playChime();
