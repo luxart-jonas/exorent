@@ -37,6 +37,13 @@
            sichtbar bestätigt per Start-Toast ("Weiter geht's: Punkt
            X von Y"). "Neue Runde starten" fragt jetzt zur Sicherheit
            nach, da es den Fortschritt absichtlich zurücksetzt.
+  v0.8.0 - BUGFIX: Karte blieb nach Schließen von Ankunfts-Fenster
+           oder Einstellungen manchmal falsch vermessen (Leaflet
+           invalidateSize ergänzt). Neuer Hinweis-Banner auf der
+           Karte, falls Kartenkacheln nicht laden (offline/kein
+           Empfang) statt einfach nur "dunkel" zu bleiben. Ankunfts-
+           Fenster ist jetzt leicht transparent statt komplett
+           blickdicht.
   ============================================================
 
   Einrichtung:
@@ -135,6 +142,12 @@
     color:var(--gold-bright); box-shadow:0 4px 12px rgba(0,0,0,.4);
   }
   .map-center-btn svg{ width:18px; height:18px; }
+  .tile-warning{
+    display:none; position:absolute; bottom:10px; left:10px; right:56px; z-index:410;
+    background:rgba(28,20,10,0.92); border:1px solid var(--gold); color:var(--gold-bright);
+    font-size:11.5px; font-weight:700; padding:9px 12px; border-radius:12px;
+    align-items:center; gap:6px; box-shadow:0 4px 12px rgba(0,0,0,.4);
+  }
   .leaflet-container{ background:#141a15; font-family:var(--sans); }
   .leaflet-control-attribution{ background:rgba(12,18,16,0.7)!important; color:var(--text-faint)!important; font-size:9px!important; }
   .leaflet-control-attribution a{ color:var(--text-dim)!important; }
@@ -196,7 +209,7 @@
   /* ---------- Trigger overlay ---------- */
   .overlay{
     position:fixed; inset:0; z-index:950;
-    background:rgba(6,9,7,0.93); backdrop-filter:blur(6px);
+    background:rgba(6,9,7,0.82); backdrop-filter:blur(5px);
     display:flex; align-items:flex-end; justify-content:center;
     opacity:0; pointer-events:none; transition:opacity .35s;
   }
@@ -331,6 +344,7 @@
     <div id="map"></div>
     <div class="map-center-btn" id="locateBtn" style="bottom:56px;" title="Zu meinem echten Standort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="3"/></svg></div>
     <div class="map-center-btn" id="centerBtn" title="Zur Route zoomen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6l7-3 8 3 7-3v15l-7 3-8-3-7 3z"/><path d="M8 3v15M16 6v15"/></svg></div>
+    <div id="tileWarning" class="tile-warning">📡 Kartenkacheln laden nicht — offline oder kein Empfang</div>
   </div>
 
   <div class="main" id="mainView"></div>
@@ -415,7 +429,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.7.2";
+  const APP_VERSION = "0.8.0";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -673,6 +687,7 @@
     });
   }
 
+  let tileFailStreak = 0;
   const OfflineTileLayer = L.TileLayer.extend({
     createTile: function(coords, done){
       const tile = document.createElement('img');
@@ -681,17 +696,28 @@
       getTile(key).then(blob => {
         if(blob){
           tile.src = URL.createObjectURL(blob);
+          tileFailStreak = 0;
+          hideTileWarning();
           done(null, tile);
         } else {
           const url = this.getTileUrl(coords);
           fetch(url).then(r => { if(!r.ok) throw new Error('tile fetch failed'); return r.blob(); })
-            .then(blob2 => { putTile(key, blob2); tile.src = URL.createObjectURL(blob2); done(null, tile); })
-            .catch(err => done(err, tile));
+            .then(blob2 => { putTile(key, blob2); tile.src = URL.createObjectURL(blob2); tileFailStreak = 0; hideTileWarning(); done(null, tile); })
+            .catch(err => { tileFailStreak++; if(tileFailStreak > 4) showTileWarning(); done(err, tile); });
         }
       });
       return tile;
     }
   });
+
+  function showTileWarning(){
+    const el = document.getElementById('tileWarning');
+    if(el) el.style.display = 'flex';
+  }
+  function hideTileWarning(){
+    const el = document.getElementById('tileWarning');
+    if(el) el.style.display = 'none';
+  }
 
   function tileRange(bounds, z){
     const p1 = L.CRS.EPSG3857.latLngToPoint(bounds.getNorthWest(), z).divideBy(256).floor();
@@ -937,6 +963,7 @@
     overlayOpen = false;
     speechSynthesis.cancel();
     render();
+    if(map) setTimeout(() => map.invalidateSize(), 100);
   }
 
   function vibrate(type){
@@ -1089,7 +1116,7 @@
       'Route: ' + route.id + ' · Besucht: ' + progress.visited.length + '/' + route.waypoints.length + ' · XP: ' + progress.xp;
     drawerEl.classList.add('open');
   };
-  document.getElementById('closeDrawer').onclick = () => drawerEl.classList.remove('open');
+  document.getElementById('closeDrawer').onclick = () => { drawerEl.classList.remove('open'); if(map) setTimeout(() => map.invalidateSize(), 100); };
   document.getElementById('downloadTiles').onclick = downloadOfflineTiles;
 
   document.getElementById('markHereBtn').onclick = () => {
