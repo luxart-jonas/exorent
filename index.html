@@ -63,6 +63,21 @@
            eine Route in Bearbeitung ist, zeigt der Hauptbildschirm
            automatisch "📍 Markierung setzen" und "✅ Route speichern" —
            kein Umweg mehr über die Einstellungen während des Laufens.
+  v0.10.0 - Feinschliff Navigation:
+           • Ankunfts-Fenster schließt jetzt automatisch nach kurzer
+             Zeit (kein "Weiter geht's!"-Button mehr nötig) und
+             springt direkt zurück in die Navigationskarte. Tippen
+             auf den dunklen Rand schließt es auch sofort.
+           • Startpunkt löst kein Feier-Fenster/Konfetti mehr aus —
+             direkt weiter zu Punkt 01.
+           • Erste Markierung heißt jetzt automatisch "Start", erst
+             die zweite wird "Punkt 01" (Start zählt nicht mit).
+           • Bereits erreichte Punkte werden auf der Karte kleiner
+             dargestellt für mehr Übersicht.
+           • Neuer "🛑 Route abbrechen"-Button (setzt Fortschritt
+             der aktiven Route zurück, fragt vorher nach).
+           • Routenlinie jetzt in kräftigem Hellblau mit weißer
+             Kontur für deutlich bessere Lesbarkeit auf der Karte.
   ============================================================
 
   Einrichtung:
@@ -191,7 +206,7 @@
     background:var(--bg-elevated); border:2.5px solid var(--gold);
     filter:drop-shadow(0 3px 7px rgba(0,0,0,.6));
   }
-  .wp-pin.done{ opacity:.65; border-color:rgba(111,217,168,0.5); }
+  .wp-pin.done{ opacity:.6; border-color:rgba(111,217,168,0.5); transform:scale(0.6); font-size:18px; }
   .wp-pin-ring{ position:absolute; inset:-6px; border-radius:50%; border:2px solid var(--gold-bright); animation:ringpulse 1.8s infinite; }
   .wp-tooltip{
     background:var(--bg-elevated)!important; color:var(--text)!important;
@@ -200,6 +215,7 @@
     box-shadow:0 3px 10px rgba(0,0,0,.45)!important;
   }
   .wp-tooltip::before{ border-top-color:var(--border)!important; }
+  .wp-tooltip-done{ opacity:.55!important; font-size:10.5px!important; }
   @keyframes ringpulse{ 0%{ transform:scale(.8); opacity:1; } 100%{ transform:scale(1.6); opacity:0; } }
   .me-dot{ width:16px; height:16px; border-radius:50%; background:var(--sky); border:3px solid #fff; box-shadow:0 0 0 4px rgba(111,179,217,0.3); }
 
@@ -465,7 +481,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.9.1";
+  const APP_VERSION = "0.10.0";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -532,7 +548,7 @@
   let voices = [];
   let selectedVoiceURI = localStorage.getItem('exotrail_voice') || '';
   let wakeLock = null;
-  let map, routeLine, recordTrackLine, meMarker, wpMarkers = [];
+  let map, routeLine, routeLineCasing, recordTrackLine, meMarker, wpMarkers = [];
   let recState = loadRecordingState();
   let recording = recState.waypoints;
   let recordingRouteId = recState.routeId;
@@ -593,7 +609,7 @@
     localStorage.setItem('exotrail_active_route_id', id);
     progress = loadProgress(id) || { visited: [], startedAt: null, xp: 0 };
     saveProgress();
-    if(map){ routeLine.setLatLngs(routeLineCoords(route)); recordTrackLine.setLatLngs([]); renderWpMarkers(); fitRoute(); }
+    if(map){ routeLine.setLatLngs(routeLineCoords(route)); routeLineCasing.setLatLngs(routeLineCoords(route)); recordTrackLine.setLatLngs([]); renderWpMarkers(); fitRoute(); }
     render();
     buildRouteLibraryUI();
   }
@@ -827,8 +843,11 @@
       maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
+    routeLineCasing = L.polyline(routeLineCoords(route), {
+      color:'#ffffff', weight:9, opacity:0.35, lineCap:'round', lineJoin:'round'
+    }).addTo(map);
     routeLine = L.polyline(routeLineCoords(route), {
-      color:'#d9a53f', weight:4, opacity:0.7, lineCap:'round', lineJoin:'round'
+      color:'#38bdf8', weight:5, opacity:0.95, lineCap:'round', lineJoin:'round'
     }).addTo(map);
 
     recordTrackLine = L.polyline([], { color:'#6fd9a8', weight:5, opacity:0.85, lineCap:'round', lineJoin:'round' }).addTo(map);
@@ -885,7 +904,7 @@
         iconSize:[44,44], iconAnchor:[22,22]
       });
       const marker = L.marker([w.lat, w.lng], { icon }).addTo(map);
-      marker.bindTooltip(esc(w.name), { permanent:true, direction:'top', offset:[0,-26], className:'wp-tooltip' });
+      marker.bindTooltip(esc(w.name), { permanent:true, direction:'top', offset:[0,-26], className: done ? 'wp-tooltip wp-tooltip-done' : 'wp-tooltip' });
       marker.bindPopup('<b>'+esc(w.name)+'</b><br>'+(TYPE_LABEL[w.type]||''));
       wpMarkers.push(marker);
     });
@@ -951,6 +970,7 @@
       <div class="quest-dist" id="distReadout">–<span>m</span></div>
       <div class="quest-name">weiter zu <b>${esc(target.name)}</b></div>
       <button class="btn btn-primary" id="navStartBtn" style="width:100%; margin-top:14px;">${navModeActive ? '🧭 Navigation läuft' : '🧭 Navigation starten'}</button>
+      ${progress.visited.length > 0 ? `<button class="fallback-btn" id="cancelRouteBtn" style="margin-top:10px; color:var(--danger); border-color:rgba(255,122,99,0.3);">🛑 Route abbrechen</button>` : ''}
     </div>`;
 
     html += '<div class="chips-scroll">';
@@ -972,6 +992,16 @@
       if(confirm('Wegpunkt "'+target.name+'" wirklich manuell bestätigen?')) triggerWaypoint(target);
     };
     document.getElementById('navStartBtn').onclick = () => { navModeActive ? exitNavMode() : enterNavMode(); };
+    const cancelBtn = document.getElementById('cancelRouteBtn');
+    if(cancelBtn) cancelBtn.onclick = () => {
+      if(!confirm('Route wirklich abbrechen? Dein Fortschritt auf dieser Route wird zurückgesetzt.')) return;
+      progress = { visited: [], startedAt: null, xp: 0 };
+      saveProgress();
+      if(navModeActive) exitNavMode();
+      renderWpMarkers();
+      render();
+      toast('Route abgebrochen — Fortschritt zurückgesetzt');
+    };
     updateDistanceDisplay(target);
   }
 
@@ -1045,6 +1075,8 @@
 
   /* ---------------- Waypoint trigger ---------------- */
   let overlayOpen = false;
+  let overlayAutoCloseTimer = null;
+
   function triggerWaypoint(wp){
     if(overlayOpen) return;
     if(progress.visited.includes(wp.id)) return;
@@ -1055,6 +1087,12 @@
     saveProgress();
     updateHUD();
     renderWpMarkers();
+
+    if(wp.type === 'start'){
+      // Kein Feier-Fenster am Start — direkt weiter zum nächsten Punkt navigieren
+      render();
+      return;
+    }
 
     drawerEl.classList.remove('open');
     overlayOpen = true;
@@ -1076,17 +1114,21 @@
       ${hasAction ? `<div class="action-box"><div class="action-box-icon">⚡</div><div class="action-box-text">${esc(wp.hypershellAction)}</div></div>` : ''}
       ${hasFact ? `<div class="funfact"><div class="funfact-label">💡 Fun Fact</div>${esc(wp.funfact)}</div>` : ''}
       <div class="card-actions">
-        <button class="btn btn-primary" id="cardOk">Weiter geht's! 🚀</button>
-        <button class="btn-ghost" id="cardReplay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
+        <button class="btn-ghost" id="cardReplay" style="flex:1;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> Nochmal vorlesen</button>
       </div>`;
 
     els.overlay.classList.add('show');
-    document.getElementById('cardOk').onclick = closeOverlay;
-    document.getElementById('cardReplay').onclick = () => speak(wp.instruction + (hasFact?'. '+wp.funfact:''));
+    document.getElementById('cardReplay').onclick = (e) => { e.stopPropagation(); speak(wp.instruction + (hasFact?'. '+wp.funfact:'')); };
+    els.overlay.onclick = (e) => { if(e.target === els.overlay) closeOverlay(); };
     speak(wp.instruction + (hasFact ? '. ' + wp.funfact : ''));
+
+    const autoCloseMs = 3200 + (hasFact ? 2200 : 0) + (hasAction ? 800 : 0);
+    if(overlayAutoCloseTimer) clearTimeout(overlayAutoCloseTimer);
+    overlayAutoCloseTimer = setTimeout(closeOverlay, autoCloseMs);
   }
 
   function closeOverlay(){
+    if(overlayAutoCloseTimer){ clearTimeout(overlayAutoCloseTimer); overlayAutoCloseTimer = null; }
     els.overlay.classList.remove('show');
     overlayOpen = false;
     speechSynthesis.cancel();
@@ -1256,13 +1298,13 @@
     if(!recordingRouteId){ toast('Bitte zuerst oben "Neue Route erstellen" oder eine Route zum Bearbeiten öffnen'); return; }
     const pos = window.__recPos || window.__lastPos
       || (map ? { lat: map.getCenter().lat, lng: map.getCenter().lng } : { lat: route.waypoints[0].lat, lng: route.waypoints[0].lng });
-    const num = recording.length + 1;
-    const label = String(num).padStart(2,'0');
+    const isStart = recording.length === 0;
+    const label = String(recording.length).padStart(2,'0'); // zählt Start nicht mit
     const entry = {
       id: 'wp_'+Date.now(),
-      name: 'Punkt ' + label,
-      type: 'checkpoint',
-      instruction: 'Dies ist Punkt ' + label + '.',
+      name: isStart ? 'Start' : ('Punkt ' + label),
+      type: isStart ? 'start' : 'checkpoint',
+      instruction: isStart ? 'Start der Tour.' : ('Dies ist Punkt ' + label + '.'),
       hypershellAction: '',
       funfact: '',
       radius: defaultRadius,
@@ -1273,7 +1315,7 @@
     buildRecordList();
     if(navigator.vibrate) navigator.vibrate(60);
     if(soundOn) playChime();
-    toast('📍 Punkt ' + label + ' markiert · Details kannst du später bearbeiten');
+    toast(isStart ? '🚀 Startpunkt markiert' : ('📍 Punkt ' + label + ' markiert · Details kannst du später bearbeiten'));
   }
   document.getElementById('markHereBtn').onclick = doMarkHere;
 
