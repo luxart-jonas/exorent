@@ -78,6 +78,22 @@
              der aktiven Route zurück, fragt vorher nach).
            • Routenlinie jetzt in kräftigem Hellblau mit weißer
              Kontur für deutlich bessere Lesbarkeit auf der Karte.
+  v0.11.0 - Aufgeräumt & vereinfacht:
+           • Test-Modus, Demo-Route-Button und "Fortschritt
+             zurücksetzen" entfernt (nicht mehr gebraucht — "Route
+             abbrechen" auf dem Hauptbildschirm deckt das ab).
+           • Karten-Punkte radikal vereinfacht: nur der aktuelle
+             Zielpunkt ist groß+beschriftet, alle anderen sind klein
+             und zart mit reiner Nummerierung (Start, 01, 02, 03…).
+           • Tiefer reinzoomen möglich (bis Zoomstufe 21, über die
+             OSM-Kachelauflösung hinaus hochskaliert).
+           • BEKANNTE GRENZE: Sobald das Handy gesperrt oder die App
+             in den Hintergrund geschickt wird, pausieren mobile
+             Browser die GPS-Aufzeichnung — das ist eine Grenze von
+             Web-Apps (kein Vollzugriff wie bei nativen Apps), lässt
+             sich technisch nicht umgehen. Die App versucht jetzt
+             zumindest, GPS und Track-Aufnahme beim Zurückkommen
+             automatisch neu zu starten, statt hängen zu bleiben.
   ============================================================
 
   Einrichtung:
@@ -201,12 +217,20 @@
   .leaflet-control-attribution{ background:rgba(12,18,16,0.7)!important; color:var(--text-faint)!important; font-size:9px!important; }
   .leaflet-control-attribution a{ color:var(--text-dim)!important; }
   .wp-pin{
-    display:flex; align-items:center; justify-content:center; font-size:26px;
-    width:44px; height:44px; border-radius:50%;
-    background:var(--bg-elevated); border:2.5px solid var(--gold);
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-weight:800;
+    border-radius:50%;
     filter:drop-shadow(0 3px 7px rgba(0,0,0,.6));
   }
-  .wp-pin.done{ opacity:.6; border-color:rgba(111,217,168,0.5); transform:scale(0.6); font-size:18px; }
+  .wp-pin.current{
+    font-size:15px; width:44px; height:44px;
+    background:var(--bg-elevated); border:2.5px solid var(--gold); color:var(--gold-bright);
+  }
+  .wp-pin.dim{
+    font-size:9.5px; width:24px; height:24px;
+    background:rgba(28,31,21,0.75); border:1.5px solid rgba(217,165,63,0.35); color:var(--text-dim);
+    opacity:.7;
+  }
   .wp-pin-ring{ position:absolute; inset:-6px; border-radius:50%; border:2px solid var(--gold-bright); animation:ringpulse 1.8s infinite; }
   .wp-tooltip{
     background:var(--bg-elevated)!important; color:var(--text)!important;
@@ -215,7 +239,6 @@
     box-shadow:0 3px 10px rgba(0,0,0,.45)!important;
   }
   .wp-tooltip::before{ border-top-color:var(--border)!important; }
-  .wp-tooltip-done{ opacity:.55!important; font-size:10.5px!important; }
   @keyframes ringpulse{ 0%{ transform:scale(.8); opacity:1; } 100%{ transform:scale(1.6); opacity:0; } }
   .me-dot{ width:16px; height:16px; border-radius:50%; background:var(--sky); border:3px solid #fff; box-shadow:0 0 0 4px rgba(111,179,217,0.3); }
 
@@ -425,16 +448,6 @@
     <div class="tile-progress-wrap"><div class="tile-progress-fill" id="tileProgressFill"></div></div>
     <div class="status-line" id="tileStatus">Noch keine Offline-Kacheln gespeichert.</div>
 
-    <div class="section-label">Testen</div>
-    <div class="row">
-      <div><div class="row-label">Test-Modus</div><div class="row-sub">GPS simulieren statt echtem Standort</div></div>
-      <div class="switch" id="testSwitch"></div>
-    </div>
-    <div id="simControls" style="display:none; padding:14px 0; border-bottom:1px solid var(--border-soft);">
-      <div class="row-sub" style="margin-bottom:4px;">Wegpunkt manuell ansteuern:</div>
-      <div class="sim-row" id="simChips"></div>
-    </div>
-
     <div class="section-label">Ansage &amp; Sound</div>
     <div class="row">
       <div><div class="row-label">Sprachansage</div><div class="row-sub">Automatisch vorlesen bei Wegpunkt</div></div>
@@ -468,8 +481,6 @@
       <textarea id="routeJson" spellcheck="false"></textarea>
     </div>
     <button class="btn-block" id="applyRoute">Route übernehmen</button>
-    <button class="btn-block" id="resetProgress">Fortschritt zurücksetzen</button>
-    <button class="btn-block btn-danger" id="factoryReset">Auf Demo-Route zurücksetzen</button>
 
     <div class="status-line" id="statusLine"></div>
   </div>
@@ -481,7 +492,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.10.0";
+  const APP_VERSION = "0.11.0";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -540,7 +551,6 @@
   let routeLibrary = loadRouteLibrary();
   let route = routeLibrary[localStorage.getItem('exotrail_active_route_id')] || routeLibrary[Object.keys(routeLibrary)[0]];
   let progress = loadProgress(route.id) || { visited: [], startedAt: null, xp: 0 };
-  let testMode = localStorage.getItem('exotrail_testmode') === '1';
   let voiceOn = localStorage.getItem('exotrail_voiceon') !== '0';
   let soundOn = localStorage.getItem('exotrail_soundon') !== '0';
   let defaultRadius = parseInt(localStorage.getItem('exotrail_radius') || '30');
@@ -838,9 +848,9 @@
   }
 
   function initMap(){
-    map = L.map('map', { zoomControl:false, attributionControl:true }).setView([route.waypoints[0].lat, route.waypoints[0].lng], 15);
+    map = L.map('map', { zoomControl:false, attributionControl:true, maxZoom:21 }).setView([route.waypoints[0].lat, route.waypoints[0].lng], 15);
     new OfflineTileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+      maxZoom: 21, maxNativeZoom: 19, attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
     routeLineCasing = L.polyline(routeLineCoords(route), {
@@ -888,24 +898,40 @@
     map.fitBounds(routeLine.getBounds().pad(0.15));
   }
 
+  function waypointLabel(index){
+    const w = route.waypoints[index];
+    if(w.type === 'start') return 'Start';
+    if(w.type === 'finish') return 'Ziel';
+    let counter = 0;
+    for(let j=0;j<=index;j++){
+      const t = route.waypoints[j].type;
+      if(t === 'start' || t === 'finish') continue;
+      counter++;
+    }
+    return String(counter).padStart(2,'0');
+  }
+
   function renderWpMarkers(){
     wpMarkers.forEach(m => map.removeLayer(m));
     wpMarkers = [];
     const nIdx = nextUnvisitedIndex();
     route.waypoints.forEach((w,i) => {
-      const done = progress.visited.includes(w.id);
       const current = i === nIdx;
+      const label = waypointLabel(i);
       const icon = L.divIcon({
         className:'', html:
           '<div style="position:relative;">' +
             (current ? '<div class="wp-pin-ring"></div>' : '') +
-            '<div class="wp-pin ' + (done?'done':'') + '">' + TYPE_EMOJI[w.type] + '</div>' +
+            '<div class="wp-pin ' + (current ? 'current' : 'dim') + '">' + label + '</div>' +
           '</div>',
-        iconSize:[44,44], iconAnchor:[22,22]
+        iconSize: current ? [44,44] : [24,24],
+        iconAnchor: current ? [22,22] : [12,12]
       });
       const marker = L.marker([w.lat, w.lng], { icon }).addTo(map);
-      marker.bindTooltip(esc(w.name), { permanent:true, direction:'top', offset:[0,-26], className: done ? 'wp-tooltip wp-tooltip-done' : 'wp-tooltip' });
-      marker.bindPopup('<b>'+esc(w.name)+'</b><br>'+(TYPE_LABEL[w.type]||''));
+      if(current){
+        marker.bindTooltip(esc(w.name), { permanent:true, direction:'top', offset:[0,-26], className:'wp-tooltip' });
+      }
+      marker.bindPopup('<b>'+esc(w.name)+'</b> · ' + label);
       wpMarkers.push(marker);
     });
   }
@@ -968,7 +994,7 @@
     let html = `<div class="quest-card">
       <div class="quest-eyebrow">🎯 Nächste Mission</div>
       <div class="quest-dist" id="distReadout">–<span>m</span></div>
-      <div class="quest-name">weiter zu <b>${esc(target.name)}</b></div>
+      <div class="quest-name">weiter zu <b>${waypointLabel(nIdx) === 'Start' ? 'Start' : 'Punkt ' + waypointLabel(nIdx)}</b></div>
       <button class="btn btn-primary" id="navStartBtn" style="width:100%; margin-top:14px;">${navModeActive ? '🧭 Navigation läuft' : '🧭 Navigation starten'}</button>
       ${progress.visited.length > 0 ? `<button class="fallback-btn" id="cancelRouteBtn" style="margin-top:10px; color:var(--danger); border-color:rgba(255,122,99,0.3);">🛑 Route abbrechen</button>` : ''}
     </div>`;
@@ -978,8 +1004,8 @@
       const done = progress.visited.includes(w.id);
       const current = i === nIdx;
       html += `<div class="step-chip ${done?'done':''} ${current?'current':''}">
-        <div class="step-chip-icon">${done?'✅':TYPE_EMOJI[w.type]}</div>
-        <div class="step-chip-name">${esc(w.name)}</div>
+        <div class="step-chip-icon">${done?'✅':'📍'}</div>
+        <div class="step-chip-name">${waypointLabel(i)}</div>
         <div class="step-chip-xp">+${TYPE_XP[w.type]||10} XP</div>
       </div>`;
     });
@@ -1107,7 +1133,7 @@
     els.card.innerHTML = `
       <div class="mascot-bubble">
         <div class="mascot-face">${rank.emoji}</div>
-        <div class="bubble">${MASCOT_LINES[wp.type]||''}${esc(wp.name)}</div>
+        <div class="bubble">${MASCOT_LINES[wp.type]||''}${(() => { const idx = route.waypoints.findIndex(x=>x.id===wp.id); const l = waypointLabel(idx); return l==='Start' ? 'Start' : ('Punkt ' + l); })()}</div>
       </div>
       <div class="xp-pop">✨ +${xpGain} XP</div>
       <div class="card-title">${esc(wp.instruction)}</div>
@@ -1249,38 +1275,13 @@
   }
   function stopLiveGPS(){ if(watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; } }
 
-  /* ---------------- Test mode ---------------- */
-  function buildSimChips(){
-    const wrap = document.getElementById('simChips');
-    wrap.innerHTML = route.waypoints.map((w,i) => `<div class="chip" data-i="${i}">${TYPE_EMOJI[w.type]} ${esc(w.name)}</div>`).join('');
-    wrap.querySelectorAll('.chip').forEach(chip => {
-      chip.onclick = () => {
-        const w = route.waypoints[parseInt(chip.dataset.i)];
-        checkProximity(w.lat, w.lng);
-        if(map) map.panTo([w.lat, w.lng]);
-      };
-    });
-  }
-  function setTestMode(on){
-    testMode = on;
-    localStorage.setItem('exotrail_testmode', on ? '1':'0');
-    document.getElementById('testSwitch').classList.toggle('on', on);
-    document.getElementById('simControls').style.display = on ? 'block' : 'none';
-    els.gpsDot.className = 'gps-dot' + (on ? ' sim' : '');
-    els.gpsLabel.textContent = on ? 'SIM' : 'GPS';
-    if(on){ stopLiveGPS(); } else { startLiveGPS(); }
-  }
-
   /* ---------------- Settings drawer wiring ---------------- */
   const drawerEl = document.getElementById('drawer');
   document.getElementById('settingsBtn').onclick = async () => {
     document.getElementById('routeJson').value = JSON.stringify(route, null, 2);
     document.getElementById('radiusInput').value = defaultRadius;
-    document.getElementById('testSwitch').classList.toggle('on', testMode);
-    document.getElementById('simControls').style.display = testMode ? 'block':'none';
     document.getElementById('voiceSwitch').classList.toggle('on', voiceOn);
     document.getElementById('soundSwitch').classList.toggle('on', soundOn);
-    buildSimChips();
     buildRecordList();
     buildRouteLibraryUI();
     const total = await countTiles();
@@ -1369,7 +1370,6 @@
     buildRouteLibraryUI();
   };
 
-  document.getElementById('testSwitch').onclick = function(){ setTestMode(!testMode); };
   document.getElementById('voiceSwitch').onclick = function(){ voiceOn = !voiceOn; localStorage.setItem('exotrail_voiceon', voiceOn?'1':'0'); this.classList.toggle('on', voiceOn); };
   document.getElementById('soundSwitch').onclick = function(){ soundOn = !soundOn; localStorage.setItem('exotrail_soundon', soundOn?'1':'0'); this.classList.toggle('on', soundOn); };
   document.getElementById('voiceSelect').onchange = function(){ selectedVoiceURI = this.value; localStorage.setItem('exotrail_voice', selectedVoiceURI); };
@@ -1383,20 +1383,7 @@
       saveRouteLibrary();
       activateRoute(parsed.id);
       toast('Route übernommen');
-      buildSimChips();
     }catch(e){ toast('Fehler im JSON: ' + e.message); }
-  };
-  document.getElementById('resetProgress').onclick = function(){
-    if(!confirm('Fortschritt dieser Route zurücksetzen?')) return;
-    progress = { visited: [], startedAt: null, xp: 0 };
-    saveProgress(); render(); renderWpMarkers(); toast('Fortschritt zurückgesetzt');
-  };
-  document.getElementById('factoryReset').onclick = function(){
-    if(!confirm('Demo-Route neu laden und aktivieren? Deine eigenen Routen bleiben erhalten.')) return;
-    routeLibrary[DEMO_ROUTE.id] = { ...DEMO_ROUTE, updatedAt: Date.now() };
-    saveRouteLibrary();
-    activateRoute(DEMO_ROUTE.id);
-    toast('Demo-Route geladen');
   };
 
   /* ---------------- Route-Aufnahme (Recorder) ---------------- */
@@ -1579,14 +1566,21 @@
 
   /* ---------------- Wake lock ---------------- */
   async function requestWakeLock(){ try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
-  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') requestWakeLock(); });
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'visible'){
+      requestWakeLock();
+      // GPS-Watcher nach Rückkehr aus dem Hintergrund/Sperrbildschirm neu starten,
+      // da mobile Browser sie beim Sperren oft stillschweigend beenden.
+      stopLiveGPS(); startLiveGPS();
+      if(recordingRouteId){ stopTrackRecording(); startTrackRecording(); }
+    }
+  });
 
   /* ---------------- Init ---------------- */
   document.getElementById('versionTag').textContent = 'v' + APP_VERSION;
   openTileDb().then(db => { tileDb = db; initMap(); render(); }).catch(() => { initMap(); render(); });
   requestWakeLock();
-  if(testMode){ els.gpsDot.className = 'gps-dot sim'; els.gpsLabel.textContent = 'SIM'; }
-  else { startLiveGPS(); }
+  startLiveGPS();
   if(recordingRouteId) startTrackRecording();
 
   setTimeout(() => {
