@@ -136,6 +136,14 @@
            beim Stillstehen) werden komplett ignoriert, statt jede
            kleine Zitterbewegung nachzuverfolgen. Bei einer echten
            Drehung (>12°) schwenkt die Karte weiterhin sanft mit.
+  v0.13.4 - Wackeln im Navigationsmodus grundlegend behoben: statt
+           bei jedem Sensor-Wert sofort zu reagieren, sammelt die
+           App jetzt fortlaufend Richtungswerte und bewertet nur
+           noch alle 20 Sekunden, ob sich die Richtung wirklich um
+           mehr als 20° geändert hat (Kreis-Mittelwert der Werte
+           aus diesem Zeitraum). Nur dann dreht sich die Karte
+           sanft nach. "Zurück zur Navigation" wertet bei Bedarf
+           sofort neu aus, statt bis zum nächsten 20s-Takt zu warten.
   ============================================================
 
   Einrichtung:
@@ -555,7 +563,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.13.3";
+  const APP_VERSION = "0.13.4";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -1014,13 +1022,18 @@
   }
 
   /* ---------------- Karte nach Blickrichtung ausrichten (wie Google Maps) ---------------- */
-  let currentHeading = 0;   // letzter roher Sensor-/GPS-Wert
+  let currentHeading = 0;   // zuletzt fest übernommene, stabile Richtung
   let displayHeading = 0;   // tatsächlich angezeigter (geglätteter) Wert
   let headingSource = null; // 'compass' | 'gps'
   let orientationAttached = false;
   let prevBearingPos = null;
   let northLocked = false;
   let rotationLoopId = null;
+  let reorientTimerId = null;
+  let headingSamples = [];
+
+  const REORIENT_INTERVAL_MS = 20000; // nur alle 20 Sekunden neu bewerten
+  const REORIENT_MIN_CHANGE = 20;      // Grad Unterschied, der für eine Neuausrichtung nötig ist
 
   function angleDiff(a, b){ return ((b - a + 540) % 360) - 180; }
 
@@ -1030,28 +1043,47 @@
     mapEl.style.transform = 'translate(-50%,-50%) rotate(' + (-heading) + 'deg)';
     document.documentElement.style.setProperty('--map-counter-rotate', heading + 'deg');
   }
-  const HEADING_CHANGE_THRESHOLD = 12; // Grad — kleinere Schwankungen (Sensorrauschen) werden ignoriert
 
+  function circularMeanDeg(samples){
+    if(samples.length === 0) return null;
+    let sumSin = 0, sumCos = 0;
+    samples.forEach(h => { const r = h*Math.PI/180; sumSin += Math.sin(r); sumCos += Math.cos(r); });
+    return (Math.atan2(sumSin, sumCos) * 180/Math.PI + 360) % 360;
+  }
+
+  // Sammelt nur Rohwerte — die eigentliche Entscheidung, ob neu ausgerichtet wird,
+  // trifft der periodische Timer weiter unten (nicht bei jedem einzelnen Sensor-Wert).
   function updateHeading(heading, source){
     headingSource = source;
-    // Toleranzzone: nur bei einer echten Richtungsänderung > Schwelle die Zielrichtung übernehmen.
-    // Kleines Sensorrauschen beim Stillstehen wird dadurch komplett ignoriert ("Füße still halten").
-    const diff = Math.abs(angleDiff(currentHeading, heading));
-    if(diff > HEADING_CHANGE_THRESHOLD){
-      currentHeading = heading;
-    }
+    headingSamples.push(heading);
   }
+
   function startRotationLoop(){
     if(rotationLoopId) return;
     rotationLoopId = setInterval(() => {
       if(!(navModeActive && autoFollow) || northLocked) return;
       const diff = angleDiff(displayHeading, currentHeading);
       if(Math.abs(diff) < 0.4) return;
-      displayHeading = (displayHeading + diff * 0.22 + 360) % 360;
+      displayHeading = (displayHeading + diff * 0.15 + 360) % 360;
       applyMapRotation(displayHeading);
     }, 90);
   }
   function stopRotationLoop(){ if(rotationLoopId){ clearInterval(rotationLoopId); rotationLoopId = null; } }
+
+  function startReorientTimer(){
+    if(reorientTimerId) return;
+    reorientTimerId = setInterval(() => {
+      if(!(navModeActive && autoFollow) || northLocked){ headingSamples = []; return; }
+      const mean = circularMeanDeg(headingSamples);
+      headingSamples = [];
+      if(mean === null) return;
+      const diff = Math.abs(angleDiff(currentHeading, mean));
+      if(diff > REORIENT_MIN_CHANGE){
+        currentHeading = mean; // die sanfte Rotations-Schleife übernimmt den Übergang dorthin
+      }
+    }, REORIENT_INTERVAL_MS);
+  }
+  function stopReorientTimer(){ if(reorientTimerId){ clearInterval(reorientTimerId); reorientTimerId = null; } headingSamples = []; }
 
   function handleOrientation(e){
     let heading = null;
@@ -1111,6 +1143,7 @@
     navModeActive = true;
     autoFollow = true;
     northLocked = false;
+    headingSamples = [];
     document.querySelector('.map-wrap').classList.add('nav-mode');
     document.getElementById('navExitBtn').style.display = 'flex';
     document.getElementById('navNorthBtn').style.display = 'flex';
@@ -1122,12 +1155,14 @@
     updateNavRecenterVisibility();
     startCompass();
     startRotationLoop();
+    startReorientTimer();
     render();
   }
   function exitNavMode(){
     navModeActive = false;
     stopCompass();
     stopRotationLoop();
+    stopReorientTimer();
     displayHeading = 0;
     applyMapRotation(0);
     document.querySelector('.map-wrap').classList.remove('nav-mode');
@@ -1150,7 +1185,14 @@
       map.setView([window.__lastPos.lat, window.__lastPos.lng], Math.max(map.getZoom(), 17));
       setTimeout(() => programmaticMove = false, 350);
     }
-    if(!northLocked){ displayHeading = currentHeading; applyMapRotation(displayHeading); }
+    // Manuelles Antippen wertet sofort aus, statt bis zum nächsten 20s-Intervall zu warten
+    if(!northLocked){
+      const mean = circularMeanDeg(headingSamples);
+      if(mean !== null) currentHeading = mean;
+      headingSamples = [];
+      displayHeading = currentHeading;
+      applyMapRotation(displayHeading);
+    }
   }
 
 
