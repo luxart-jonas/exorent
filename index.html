@@ -144,6 +144,26 @@
            aus diesem Zeitraum). Nur dann dreht sich die Karte
            sanft nach. "Zurück zur Navigation" wertet bei Bedarf
            sofort neu aus, statt bis zum nächsten 20s-Takt zu warten.
+  v0.14.0 - Fünf Korrekturen:
+           • Hoffnungsthal-Demo-Route endgültig entfernt (auch
+             automatische Bereinigung für bereits gespeicherte
+             Reste aus früheren Versionen). Ohne eigene Route zeigt
+             die App jetzt einen klaren "Noch keine Route"-Hinweis
+             statt einer Platzhalter-Route.
+           • Dreh-Intervall der Navigationskarte als Zwischenlösung
+             von 20 auf 10 Sekunden verkürzt.
+           • BUGFIX: Wegpunkt-Beschriftungen standen beim Drehen
+             schräg, weil Leaflets eigene Positionierung und unsere
+             Gegenrotation dieselbe Eigenschaft am selben Element
+             überschrieben haben. Jetzt trägt ein eigenes inneres
+             Element die Gegenrotation — Beschriftungen bleiben
+             beim Drehen immer aufrecht lesbar.
+           • Karte zentriert sich jetzt automatisch auf die echte
+             Position, sobald der erste GPS-Fixpunkt da ist — kein
+             Antippen des Finden-Knopfs mehr nötig.
+           • BUGFIX: Nochmaliges Tippen auf (fast) denselben Punkt
+             beim Kartenplanen richtet jetzt nichts mehr an, statt
+             ungewollt einen Punkt zu duplizieren.
   ============================================================
 
   Einrichtung:
@@ -151,9 +171,9 @@
   2. Vor Kundenübergabe: App einmal MIT WLAN/Empfang öffnen und in
      den Einstellungen auf "Karte offline speichern" tippen — lädt
      alle Kartenausschnitte der Route für Offline-Nutzung
-  3. Demo-Route unten = ERFUNDENE Platzhalter-Koordinaten
-     (Raum Rösrath/Hoffnungsthal). Über Einstellungen -> Route (JSON)
-     durch echte Punkte ersetzen.
+  3. Neue Route: entweder ablaufen ("Neue Route erstellen") oder
+     direkt auf der Karte antippen ("Karte am Handy erstellen") —
+     beides unter Einstellungen -> "Meine Routen".
   4. Hinweis Kartenkacheln: OpenStreetMap erlaubt normale Nutzung
      im Browser (auch für kleine Business-Cases) kostenlos. Falls du
      später viele Geräte/Kunden gleichzeitig hast, lohnt sich ein
@@ -292,12 +312,19 @@
   }
   .wp-pin-ring{ position:absolute; inset:-6px; border-radius:50%; border:2px solid var(--gold-bright); animation:ringpulse 1.8s infinite; }
   .wp-tooltip{
-    background:var(--bg-elevated)!important; color:var(--text)!important;
-    border:1px solid var(--border)!important; border-radius:9px!important;
-    font-size:12px!important; font-weight:800!important; padding:5px 10px!important;
-    box-shadow:0 3px 10px rgba(0,0,0,.45)!important;
+    background:transparent!important; border:none!important; box-shadow:none!important; padding:0!important;
   }
-  .wp-tooltip::before{ border-top-color:var(--border)!important; }
+  .wp-tooltip::before{ display:none!important; }
+  .wp-tooltip-box{
+    display:inline-block;
+    background:var(--bg-elevated); color:var(--text);
+    border:1px solid var(--border); border-radius:9px;
+    font-size:12px; font-weight:800; padding:5px 10px;
+    box-shadow:0 3px 10px rgba(0,0,0,.45); white-space:nowrap;
+    transform: rotate(var(--map-counter-rotate, 0deg));
+    transform-origin: 50% 50%;
+    transition: transform .12s linear;
+  }
   @keyframes ringpulse{ 0%{ transform:scale(.8); opacity:1; } 100%{ transform:scale(1.6); opacity:0; } }
   .me-dot{ width:16px; height:16px; border-radius:50%; background:var(--sky); border:3px solid #fff; box-shadow:0 0 0 4px rgba(111,179,217,0.3); }
   .me-arrow{
@@ -309,7 +336,7 @@
     border-bottom:14px solid var(--sky); filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));
   }
   #map{ transition: transform .12s linear; }
-  .wp-pin, .wp-tooltip, .leaflet-control-attribution{ transform: rotate(var(--map-counter-rotate, 0deg)); transition: transform .25s linear; }
+  .wp-pin, .leaflet-control-attribution{ transform: rotate(var(--map-counter-rotate, 0deg)); transition: transform .12s linear; }
 
   /* ---------- Main scroll area (below map) ---------- */
   .main{ flex:1; overflow-y:auto; padding:16px 16px 24px; }
@@ -563,37 +590,18 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.13.4";
+  const APP_VERSION = "0.14.0";
 
   /* ============================================================
-     DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
-     type: 'start' | 'mode' | 'info' | 'checkpoint' | 'finish'
+     Interner Platzhalter — NUR damit die App nicht abstürzt, wenn
+     noch keine einzige eigene Route existiert. Erscheint NIE in
+     "Meine Routen", wird NIE gespeichert/aktiviert — render() zeigt
+     stattdessen einen "Noch keine Route"-Hinweis an.
   ============================================================ */
-  const DEMO_ROUTE = {
-    id: "demo-hoffnungsthal",
-    name: "Hoffnungsthal Runde (Demo)",
-    waypoints: [
-      { id:"wp0", name:"Start · Verleihstation", lat:50.9328, lng:7.2011, radius:40, type:"start",
-        instruction:"Willkommen bei ExoRent. Dein Exoskelett ist im Eco-Modus. Folge einfach dem Pfad — ich melde mich an jeder Station.",
-        hypershellAction:"", funfact:"Diese Runde führt dich rund um Hoffnungsthal — leichte Anstiege, ein Aussichtspunkt, ein Waldabschnitt." },
-      { id:"wp1", name:"Fuß des Anstiegs", lat:50.9341, lng:7.2032, radius:30, type:"mode",
-        instruction:"Jetzt beginnt der erste Anstieg. Bitte wechsle in den Bergmodus mit 50 Prozent Power.",
-        hypershellAction:"Hypershell → Bergmodus → 50% Power",
-        funfact:"Der Boden hier besteht aus Grauwacke — typisches Gestein des Bergischen Landes, vor rund 380 Millionen Jahren als Meeresablagerung entstanden." },
-      { id:"wp2", name:"Aussichtspunkt", lat:50.9356, lng:7.2050, radius:35, type:"checkpoint",
-        instruction:"Geschafft. Mach hier ruhig kurz Pause und genieß die Aussicht.",
-        hypershellAction:"", funfact:"Bei klarer Sicht erkennst du von hier die Höhenzüge Richtung Königsforst — eines der größten zusammenhängenden Waldgebiete im Kölner Umland." },
-      { id:"wp3", name:"Kontrast-Moment", lat:50.9349, lng:7.2078, radius:25, type:"mode",
-        instruction:"Jetzt wird's spannend: Schalte die Power komplett aus. Du merkst sofort, was dir das Exoskelett sonst abnimmt.",
-        hypershellAction:"Hypershell → Power AUS", funfact:"" },
-      { id:"wp4", name:"Waldabschnitt", lat:50.9330, lng:7.2095, radius:30, type:"mode",
-        instruction:"Power wieder an — probier jetzt den Hypershell Trail-Modus für den unebenen Waldboden.",
-        hypershellAction:"Hypershell → Trail-Modus",
-        funfact:"Der Königsforst ist Rückzugsgebiet für Wildkatzen — scheue Tiere, deren Spuren man öfter findet als die Tiere selbst." },
-      { id:"wp5", name:"Ziel · Verleihstation", lat:50.9328, lng:7.2011, radius:40, type:"finish",
-        instruction:"Mission erfüllt! Willkommen zurück auf der Erde. Danke, dass du mit ExoRent unterwegs warst.",
-        hypershellAction:"", funfact:"" }
-    ]
+  const EMPTY_ROUTE_STUB = {
+    id: "__empty__",
+    name: "",
+    waypoints: [ { id:"__stub__", name:"", lat:50.9328, lng:7.2011, radius:30, type:"start", instruction:"", hypershellAction:"", funfact:"" } ]
   };
 
   const TYPE_EMOJI = { start:"🚀", mode:"⚡", checkpoint:"📍", info:"💡", finish:"🏁" };
@@ -620,7 +628,7 @@
 
   /* ---------------- State ---------------- */
   let routeLibrary = loadRouteLibrary();
-  let route = routeLibrary[localStorage.getItem('exotrail_active_route_id')] || routeLibrary[Object.keys(routeLibrary)[0]];
+  let route = routeLibrary[localStorage.getItem('exotrail_active_route_id')] || routeLibrary[Object.keys(routeLibrary)[0]] || EMPTY_ROUTE_STUB;
   let progress = loadProgress(route.id) || { visited: [], startedAt: null, xp: 0 };
   let voiceOn = localStorage.getItem('exotrail_voiceon') !== '0';
   let soundOn = localStorage.getItem('exotrail_soundon') !== '0';
@@ -664,12 +672,17 @@
       if(!lib){
         lib = {};
         const old = localStorage.getItem('exotrail_route'); // Migration aus v0.6
-        if(old){ try{ const r = JSON.parse(old); lib[r.id] = { ...r, updatedAt: Date.now() }; }catch(e){} }
-        if(Object.keys(lib).length === 0){ lib[DEMO_ROUTE.id] = { ...DEMO_ROUTE, updatedAt: Date.now() }; }
+        if(old){ try{ const r = JSON.parse(old); if(r.id !== 'demo-hoffnungsthal') lib[r.id] = { ...r, updatedAt: Date.now() }; }catch(e){} }
         localStorage.setItem('exotrail_routes_v1', JSON.stringify(lib));
       }
+      // Aufräumen: alte Hoffnungsthal-Demo aus früheren Versionen restlos entfernen, falls noch gespeichert
+      if(lib['demo-hoffnungsthal']){
+        delete lib['demo-hoffnungsthal'];
+        localStorage.setItem('exotrail_routes_v1', JSON.stringify(lib));
+        if(localStorage.getItem('exotrail_active_route_id') === 'demo-hoffnungsthal') localStorage.removeItem('exotrail_active_route_id');
+      }
       return lib;
-    }catch(e){ return { [DEMO_ROUTE.id]: { ...DEMO_ROUTE, updatedAt: Date.now() } }; }
+    }catch(e){ return {}; }
   }
   function saveRouteLibrary(){ localStorage.setItem('exotrail_routes_v1', JSON.stringify(routeLibrary)); }
   function loadProgress(routeId){ try{ const p = localStorage.getItem('exotrail_progress_'+routeId); return p ? JSON.parse(p) : null; }catch(e){ return null; } }
@@ -729,9 +742,15 @@
     saveRouteLibrary();
     localStorage.removeItem('exotrail_progress_'+id);
     if(route.id === id){
-      let remaining = Object.keys(routeLibrary);
-      if(remaining.length === 0){ routeLibrary[DEMO_ROUTE.id] = { ...DEMO_ROUTE, updatedAt: Date.now() }; saveRouteLibrary(); remaining = [DEMO_ROUTE.id]; }
-      activateRoute(remaining[0]);
+      const remaining = Object.keys(routeLibrary);
+      if(remaining.length === 0){
+        route = EMPTY_ROUTE_STUB;
+        localStorage.removeItem('exotrail_active_route_id');
+        if(map){ routeLine.setLatLngs([]); routeLineCasing.setLatLngs([]); renderWpMarkers(); }
+        render();
+      } else {
+        activateRoute(remaining[0]);
+      }
     }
     if(recordingRouteId === id){ recording=[]; recordingRouteId=null; recordingRouteName=''; saveRecordingState(); buildRecordList(); }
     buildRouteLibraryUI();
@@ -979,7 +998,7 @@
   }
 
   function fitRoute(){
-    if(!map) return;
+    if(!map || route.id === '__empty__') return;
     map.fitBounds(routeLine.getBounds().pad(0.15));
   }
 
@@ -999,6 +1018,7 @@
   function renderWpMarkers(){
     wpMarkers.forEach(m => map.removeLayer(m));
     wpMarkers = [];
+    if(route.id === '__empty__') return;
     const nIdx = nextUnvisitedIndex();
     route.waypoints.forEach((w,i) => {
       const current = i === nIdx;
@@ -1014,7 +1034,7 @@
       });
       const marker = L.marker([w.lat, w.lng], { icon }).addTo(map);
       if(current){
-        marker.bindTooltip(esc(w.name), { permanent:true, direction:'top', offset:[0,-26], className:'wp-tooltip' });
+        marker.bindTooltip('<div class="wp-tooltip-box">'+esc(w.name)+'</div>', { permanent:true, direction:'top', offset:[0,-26], className:'wp-tooltip' });
       }
       marker.bindPopup('<b>'+esc(w.name)+'</b> · ' + label);
       wpMarkers.push(marker);
@@ -1032,7 +1052,7 @@
   let reorientTimerId = null;
   let headingSamples = [];
 
-  const REORIENT_INTERVAL_MS = 20000; // nur alle 20 Sekunden neu bewerten
+  const REORIENT_INTERVAL_MS = 10000; // Zwischenlösung: alle 10 Sekunden neu bewerten
   const REORIENT_MIN_CHANGE = 20;      // Grad Unterschied, der für eine Neuausrichtung nötig ist
 
   function angleDiff(a, b){ return ((b - a + 540) % 360) - 180; }
@@ -1211,6 +1231,7 @@
 
   function render(){
     if(recordingRouteId){ renderRecordingView(); return; }
+    if(route.id === '__empty__'){ renderEmptyState(); return; }
     updateHUD();
     const nIdx = nextUnvisitedIndex();
     if(nIdx === -1){ renderFinish(); renderWpMarkers(); if(navModeActive) exitNavMode(); return; }
@@ -1300,6 +1321,20 @@
     const d = haversine(window.__lastPos.lat, window.__lastPos.lng, target.lat, target.lng);
     const f = fmtDist(d);
     el.innerHTML = f.val + '<span>' + f.unit + '</span>';
+  }
+
+  function renderEmptyState(){
+    els.main.innerHTML = `<div class="finish">
+      <div class="finish-mascot">🗺️</div>
+      <div class="finish-eyebrow">Noch keine Route</div>
+      <div class="finish-title" style="font-size:20px;">Leg deine erste Route an</div>
+      <div class="row-sub" style="text-align:center; margin:10px 0 22px;">Lauf eine Strecke ab oder plane sie direkt auf der Karte — beides geht in den Einstellungen unter "Meine Routen".</div>
+      <button class="btn btn-primary" id="emptyStateSettingsBtn" style="width:100%;">⚙️ Einstellungen öffnen</button>
+    </div>`;
+    document.getElementById('emptyStateSettingsBtn').onclick = () => {
+      buildRecordList(); buildRouteLibraryUI();
+      drawerEl.classList.add('open');
+    };
   }
 
   function renderFinish(){
@@ -1492,9 +1527,16 @@
   }
 
   /* ---------------- GPS: live ---------------- */
+  let initialLocateDone = false;
   function checkProximity(lat,lng){
     window.__lastPos = { lat, lng };
     updateMeMarker(lat,lng);
+    if(!initialLocateDone && map){
+      initialLocateDone = true;
+      programmaticMove = true;
+      map.setView([lat,lng], 16);
+      setTimeout(() => programmaticMove = false, 300);
+    }
     if(navModeActive) updateHeadingFromGps(lat,lng);
     if(navModeActive && autoFollow && map){
       programmaticMove = true;
@@ -1524,7 +1566,7 @@
   /* ---------------- Settings drawer wiring ---------------- */
   const drawerEl = document.getElementById('drawer');
   document.getElementById('settingsBtn').onclick = async () => {
-    document.getElementById('routeJson').value = JSON.stringify(route, null, 2);
+    document.getElementById('routeJson').value = route.id === '__empty__' ? '' : JSON.stringify(route, null, 2);
     document.getElementById('radiusInput').value = defaultRadius;
     document.getElementById('voiceSwitch').classList.toggle('on', voiceOn);
     document.getElementById('soundSwitch').classList.toggle('on', soundOn);
@@ -1534,8 +1576,9 @@
     document.getElementById('tileStatus').textContent = total > 0
       ? '✅ ' + total + ' Kacheln bereits offline gespeichert'
       : 'Noch keine Offline-Kacheln gespeichert.';
-    document.getElementById('statusLine').textContent =
-      'Route: ' + route.id + ' · Besucht: ' + progress.visited.length + '/' + route.waypoints.length + ' · XP: ' + progress.xp;
+    document.getElementById('statusLine').textContent = route.id === '__empty__'
+      ? 'Noch keine Route aktiv.'
+      : 'Route: ' + route.id + ' · Besucht: ' + progress.visited.length + '/' + route.waypoints.length + ' · XP: ' + progress.xp;
     drawerEl.classList.add('open');
   };
   document.getElementById('closeDrawer').onclick = () => { drawerEl.classList.remove('open'); if(map) setTimeout(() => map.invalidateSize(), 100); };
@@ -1688,6 +1731,16 @@
   function detachPlanningClick(){ if(map) map.off('click', mapPlanningClickListener); }
 
   async function doPlanPoint(latlng){
+    // Schutz: nochmaliges Tippen auf (fast) denselben Fleck soll nichts anrichten,
+    // nicht versehentlich einen Punkt duplizieren oder Verwirrung stiften.
+    if(recording.length > 0){
+      const last = recording[recording.length - 1];
+      if(haversine(last.lat, last.lng, latlng.lat, latlng.lng) < 6){
+        toast('Das ist bereits dein letzter Punkt — tippe woanders für den nächsten');
+        return;
+      }
+    }
+
     const isStart = recording.length === 0;
     const label = String(recording.length).padStart(2,'0');
     const entry = {
