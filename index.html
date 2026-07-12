@@ -130,6 +130,12 @@
              Navigationsmodus: sperrt die Karte auf die gewohnte
              Nordausrichtung (wie vorher). Nochmal antippen
              ("🧭 Nach Blickrichtung") aktiviert die Drehung wieder.
+  v0.13.3 - Toleranzzone gegen Wackeln im Stand: die Karte richtet
+           sich jetzt erst neu aus, wenn sich die Richtung um mehr
+           als 12° ändert. Kleinere Schwankungen (Kompass-Rauschen
+           beim Stillstehen) werden komplett ignoriert, statt jede
+           kleine Zitterbewegung nachzuverfolgen. Bei einer echten
+           Drehung (>12°) schwenkt die Karte weiterhin sanft mit.
   ============================================================
 
   Einrichtung:
@@ -549,7 +555,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.13.2";
+  const APP_VERSION = "0.13.3";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -1024,10 +1030,16 @@
     mapEl.style.transform = 'translate(-50%,-50%) rotate(' + (-heading) + 'deg)';
     document.documentElement.style.setProperty('--map-counter-rotate', heading + 'deg');
   }
+  const HEADING_CHANGE_THRESHOLD = 12; // Grad — kleinere Schwankungen (Sensorrauschen) werden ignoriert
+
   function updateHeading(heading, source){
-    currentHeading = heading;
     headingSource = source;
-    // Die eigentliche Kartendrehung übernimmt die geglättete Rotations-Schleife (kein Sofort-Sprung pro Sensor-Event)
+    // Toleranzzone: nur bei einer echten Richtungsänderung > Schwelle die Zielrichtung übernehmen.
+    // Kleines Sensorrauschen beim Stillstehen wird dadurch komplett ignoriert ("Füße still halten").
+    const diff = Math.abs(angleDiff(currentHeading, heading));
+    if(diff > HEADING_CHANGE_THRESHOLD){
+      currentHeading = heading;
+    }
   }
   function startRotationLoop(){
     if(rotationLoopId) return;
