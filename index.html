@@ -118,6 +118,18 @@
            geschätzt war. Schließt sich jetzt erst kurz nachdem die
            Ansage wirklich zu Ende gesprochen hat (mit Sicherheits-
            Zeitlimit falls Sprachausgabe fehlschlägt/deaktiviert ist).
+  v0.13.2 - Kartendrehung überarbeitet:
+           • BUGFIX: schwarze Ecken beim Drehen behoben — Karte ist
+             jetzt größer als ihr Fenster angelegt, sodass beim
+             Rotieren immer alles ausgefüllt bleibt.
+           • Drehung deutlich sanfter: Kompass-/GPS-Richtung wird
+             jetzt geglättet und nur alle ~90ms in kleinen Schritten
+             nachgeführt, statt bei jedem Sensor-Event hart zu
+             springen (das verursachte das Ruckeln).
+           • Neuer "🧭 Karte Norden"-Button oben rechts im
+             Navigationsmodus: sperrt die Karte auf die gewohnte
+             Nordausrichtung (wie vorher). Nochmal antippen
+             ("🧭 Nach Blickrichtung") aktiviert die Drehung wieder.
   ============================================================
 
   Einrichtung:
@@ -208,7 +220,10 @@
 
   /* ---------- Map ---------- */
   .map-wrap{ flex-shrink:0; margin:0 16px; border-radius:20px; overflow:hidden; border:1px solid var(--border); position:relative; height:38vh; min-height:220px; }
-  #map{ width:100%; height:100%; background:#141a15; }
+  #map{
+    position:absolute; top:50%; left:50%; width:200%; height:200%;
+    background:#141a15; transform:translate(-50%,-50%) rotate(0deg); transform-origin:50% 50%;
+  }
   .map-center-btn{
     position:absolute; bottom:10px; right:10px; z-index:410;
     width:38px; height:38px; border-radius:50%; background:var(--bg-elevated);
@@ -228,6 +243,12 @@
     background:rgba(12,18,16,0.85); border:1px solid var(--border); color:var(--text);
     font-family:var(--sans); font-size:12px; font-weight:700; padding:9px 13px; border-radius:20px;
     cursor:pointer; display:flex; align-items:center; gap:5px;
+  }
+  .nav-north-btn{
+    position:absolute; top:10px; right:10px; z-index:415;
+    background:rgba(12,18,16,0.85); border:1px solid var(--border); color:var(--gold-bright);
+    font-family:var(--sans); font-size:11.5px; font-weight:700; padding:9px 12px; border-radius:20px;
+    cursor:pointer; display:flex; align-items:center; gap:5px; white-space:nowrap;
   }
   .nav-recenter-btn{
     position:absolute; bottom:10px; left:50%; transform:translateX(-50%); z-index:415;
@@ -273,7 +294,7 @@
     width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent;
     border-bottom:14px solid var(--sky); filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));
   }
-  #map{ transition: transform .25s linear; transform-origin: 50% 50%; }
+  #map{ transition: transform .12s linear; }
   .wp-pin, .wp-tooltip, .leaflet-control-attribution{ transform: rotate(var(--map-counter-rotate, 0deg)); transition: transform .25s linear; }
 
   /* ---------- Main scroll area (below map) ---------- */
@@ -453,6 +474,7 @@
     <div class="map-center-btn" id="centerBtn" title="Zur Route zoomen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6l7-3 8 3 7-3v15l-7 3-8-3-7 3z"/><path d="M8 3v15M16 6v15"/></svg></div>
     <div id="tileWarning" class="tile-warning">📡 Kartenkacheln laden nicht — offline oder kein Empfang</div>
     <button id="navExitBtn" class="nav-exit-btn" style="display:none;">✕ Navigation beenden</button>
+    <button id="navNorthBtn" class="nav-north-btn" style="display:none;">🧭 Karte Norden</button>
     <button id="navRecenterBtn" class="nav-recenter-btn" style="display:none;">🎯 Zurück zur Navigation</button>
   </div>
 
@@ -527,7 +549,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.13.1";
+  const APP_VERSION = "0.13.2";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -916,6 +938,7 @@
     document.getElementById('centerBtn').onclick = fitRoute;
     document.getElementById('locateBtn').onclick = locateMe;
     document.getElementById('navExitBtn').onclick = exitNavMode;
+    document.getElementById('navNorthBtn').onclick = toggleNorthLock;
     document.getElementById('navRecenterBtn').onclick = recenterNav;
 
     map.on('dragstart zoomstart', () => {
@@ -985,22 +1008,39 @@
   }
 
   /* ---------------- Karte nach Blickrichtung ausrichten (wie Google Maps) ---------------- */
-  let currentHeading = 0;
+  let currentHeading = 0;   // letzter roher Sensor-/GPS-Wert
+  let displayHeading = 0;   // tatsächlich angezeigter (geglätteter) Wert
   let headingSource = null; // 'compass' | 'gps'
   let orientationAttached = false;
   let prevBearingPos = null;
+  let northLocked = false;
+  let rotationLoopId = null;
+
+  function angleDiff(a, b){ return ((b - a + 540) % 360) - 180; }
 
   function applyMapRotation(heading){
     const mapEl = document.getElementById('map');
     if(!mapEl) return;
-    mapEl.style.transform = 'rotate(' + (-heading) + 'deg)';
+    mapEl.style.transform = 'translate(-50%,-50%) rotate(' + (-heading) + 'deg)';
     document.documentElement.style.setProperty('--map-counter-rotate', heading + 'deg');
   }
   function updateHeading(heading, source){
     currentHeading = heading;
     headingSource = source;
-    if(navModeActive && autoFollow) applyMapRotation(heading);
+    // Die eigentliche Kartendrehung übernimmt die geglättete Rotations-Schleife (kein Sofort-Sprung pro Sensor-Event)
   }
+  function startRotationLoop(){
+    if(rotationLoopId) return;
+    rotationLoopId = setInterval(() => {
+      if(!(navModeActive && autoFollow) || northLocked) return;
+      const diff = angleDiff(displayHeading, currentHeading);
+      if(Math.abs(diff) < 0.4) return;
+      displayHeading = (displayHeading + diff * 0.22 + 360) % 360;
+      applyMapRotation(displayHeading);
+    }, 90);
+  }
+  function stopRotationLoop(){ if(rotationLoopId){ clearInterval(rotationLoopId); rotationLoopId = null; } }
+
   function handleOrientation(e){
     let heading = null;
     if(typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
@@ -1044,26 +1084,43 @@
       prevBearingPos = {lat,lng};
     }
   }
+  function toggleNorthLock(){
+    northLocked = !northLocked;
+    if(northLocked){ displayHeading = 0; applyMapRotation(0); }
+    updateNorthBtnLabel();
+  }
+  function updateNorthBtnLabel(){
+    const btn = document.getElementById('navNorthBtn');
+    if(!btn) return;
+    btn.textContent = northLocked ? '🧭 Nach Blickrichtung' : '🧭 Karte Norden';
+  }
 
   function enterNavMode(){
     navModeActive = true;
     autoFollow = true;
+    northLocked = false;
     document.querySelector('.map-wrap').classList.add('nav-mode');
     document.getElementById('navExitBtn').style.display = 'flex';
+    document.getElementById('navNorthBtn').style.display = 'flex';
+    updateNorthBtnLabel();
     const pos = window.__lastPos;
     programmaticMove = true;
     if(pos) map.setView([pos.lat, pos.lng], 17); else fitRoute();
     setTimeout(() => { programmaticMove = false; map.invalidateSize(); }, 350);
     updateNavRecenterVisibility();
     startCompass();
+    startRotationLoop();
     render();
   }
   function exitNavMode(){
     navModeActive = false;
     stopCompass();
+    stopRotationLoop();
+    displayHeading = 0;
     applyMapRotation(0);
     document.querySelector('.map-wrap').classList.remove('nav-mode');
     document.getElementById('navExitBtn').style.display = 'none';
+    document.getElementById('navNorthBtn').style.display = 'none';
     document.getElementById('navRecenterBtn').style.display = 'none';
     setTimeout(() => { if(map) map.invalidateSize(); }, 350);
     render();
@@ -1081,7 +1138,7 @@
       map.setView([window.__lastPos.lat, window.__lastPos.lng], Math.max(map.getZoom(), 17));
       setTimeout(() => programmaticMove = false, 350);
     }
-    applyMapRotation(currentHeading);
+    if(!northLocked){ displayHeading = currentHeading; applyMapRotation(displayHeading); }
   }
 
 
