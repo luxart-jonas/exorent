@@ -94,6 +94,15 @@
              sich technisch nicht umgehen. Die App versucht jetzt
              zumindest, GPS und Track-Aufnahme beim Zurückkommen
              automatisch neu zu starten, statt hängen zu bleiben.
+  v0.12.0 - Neuer Menüpunkt "🗺️ Karte am Handy erstellen": Route
+           komplett am Schreibtisch planen, ohne sie abzulaufen.
+           Tippen auf die Karte setzt Start und weitere Punkte
+           (Beschriftung wie beim Laufen: Start, 01, 02, 03…).
+           Zwischen den Punkten wird die Strecke per Routing-Service
+           (routing.openstreetmap.de, Fuß-Profil) entlang echter
+           Wege berechnet statt einer Luftlinie — fällt bei fehlendem
+           Empfang automatisch auf eine gerade Verbindung zurück.
+           Neuer "↩️ Letzten Punkt entfernen"-Button für Korrekturen.
   ============================================================
 
   Einrichtung:
@@ -439,7 +448,8 @@
   <div class="drawer-body">
 
     <div class="section-label">Meine Routen 🗂️</div>
-    <button class="btn-block accent" id="newRouteBtn">➕ Neue Route erstellen</button>
+    <button class="btn-block accent" id="newRouteBtn">➕ Neue Route erstellen (laufen)</button>
+    <button class="btn-block accent" id="planRouteBtn">🗺️ Karte am Handy erstellen</button>
     <div id="routeLibraryList"></div>
 
     <div class="section-label">Offline-Karte</div>
@@ -492,7 +502,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.11.0";
+  const APP_VERSION = "0.12.0";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -564,6 +574,9 @@
   let recordingRouteId = recState.routeId;
   let recordingRouteName = recState.routeName;
   let recordingTrack = recState.track || [];
+  let planningMode = recState.planning || false;
+  let recordingSegLens = recState.segLens || [];
+  let recordingMarkers = [];
   let editingRecordIndex = null;
   let trackWatchId = null;
   let navModeActive = false;
@@ -603,14 +616,16 @@
   function loadRecordingState(){
     try{
       const raw = localStorage.getItem('exotrail_recording_draft');
-      if(!raw) return { routeId:null, routeName:'', waypoints:[], track:[] };
+      if(!raw) return { routeId:null, routeName:'', waypoints:[], track:[], planning:false, segLens:[] };
       const parsed = JSON.parse(raw);
-      if(Array.isArray(parsed)) return { routeId:null, routeName:'', waypoints:parsed, track:[] }; // altes Format
+      if(Array.isArray(parsed)) return { routeId:null, routeName:'', waypoints:parsed, track:[], planning:false, segLens:[] }; // altes Format
       if(!parsed.track) parsed.track = [];
+      if(!parsed.segLens) parsed.segLens = [];
+      if(typeof parsed.planning !== 'boolean') parsed.planning = false;
       return parsed;
-    }catch(e){ return { routeId:null, routeName:'', waypoints:[], track:[] }; }
+    }catch(e){ return { routeId:null, routeName:'', waypoints:[], track:[], planning:false, segLens:[] }; }
   }
-  function saveRecordingState(){ localStorage.setItem('exotrail_recording_draft', JSON.stringify({ routeId:recordingRouteId, routeName:recordingRouteName, waypoints:recording, track:recordingTrack })); }
+  function saveRecordingState(){ localStorage.setItem('exotrail_recording_draft', JSON.stringify({ routeId:recordingRouteId, routeName:recordingRouteName, waypoints:recording, track:recordingTrack, planning:planningMode, segLens:recordingSegLens })); }
 
   function activateRoute(id){
     const r = routeLibrary[id];
@@ -630,6 +645,9 @@
     if(recording.length > 0 && recordingRouteId !== id){
       if(!confirm('Es gibt noch eine offene Aufnahme ("'+(recordingRouteName||'unbenannt')+'", '+recording.length+' Punkte). Verwerfen und stattdessen "'+r.name+'" bearbeiten?')) return;
     }
+    detachPlanningClick();
+    planningMode = false;
+    recordingSegLens = [];
     recording = r.waypoints.map(w => ({...w}));
     recordingTrack = (r.track || []).map(p => [p[0], p[1]]);
     recordingRouteId = r.id;
@@ -860,10 +878,15 @@
       color:'#38bdf8', weight:5, opacity:0.95, lineCap:'round', lineJoin:'round'
     }).addTo(map);
 
-    recordTrackLine = L.polyline([], { color:'#6fd9a8', weight:5, opacity:0.85, lineCap:'round', lineJoin:'round' }).addTo(map);
+    recordTrackLine = L.polyline(recordingTrack, { color:'#6fd9a8', weight:5, opacity:0.85, lineCap:'round', lineJoin:'round' }).addTo(map);
 
     renderWpMarkers();
     fitRoute();
+
+    if(recordingRouteId){
+      renderPlanningMarkers();
+      if(planningMode) attachPlanningClick();
+    }
 
     document.getElementById('centerBtn').onclick = fitRoute;
     document.getElementById('locateBtn').onclick = locateMe;
@@ -1035,10 +1058,13 @@
     const editing = !!routeLibrary[recordingRouteId];
     const num = recording.length;
     let html = `<div class="quest-card">
-      <div class="quest-eyebrow">${editing ? '✏️ Route bearbeiten' : '🆕 Neue Route'}</div>
+      <div class="quest-eyebrow">${editing ? '✏️ Route bearbeiten' : (planningMode ? '🗺️ Route auf Karte planen' : '🆕 Neue Route (laufen)')}</div>
       <div class="quest-name" style="font-size:18px; margin-top:2px;"><b>${esc(recordingRouteName)}</b></div>
       <div class="row-sub" style="margin-top:6px;">${num} Punkt${num===1?'':'e'} markiert${recordingTrack.length ? ' · ' + recordingTrack.length + ' Spurpunkte' : ''}</div>
-      <button class="btn btn-primary" id="mainMarkBtn" style="width:100%; margin-top:14px; font-size:16.5px; padding:17px;">📍 Markierung setzen</button>
+      ${planningMode
+        ? `<div class="row-sub" style="margin-top:14px; text-align:center; padding:14px; background:var(--bg-elevated); border-radius:14px; border:1px dashed var(--border);">👆 Tippe auf die Karte, um ${num===0?'den Startpunkt':'den nächsten Punkt'} zu setzen</div>`
+        : `<button class="btn btn-primary" id="mainMarkBtn" style="width:100%; margin-top:14px; font-size:16.5px; padding:17px;">📍 Markierung setzen</button>`}
+      ${num > 0 ? `<button class="fallback-btn" id="mainUndoBtn" style="margin-top:10px;">↩️ Letzten Punkt entfernen</button>` : ''}
     </div>`;
 
     if(num > 0){
@@ -1056,7 +1082,9 @@
     html += `<button class="fallback-btn" id="mainSettingsBtn" style="margin-top:10px;">⚙️ Punkte bearbeiten / Einstellungen</button>`;
 
     els.main.innerHTML = html;
-    document.getElementById('mainMarkBtn').onclick = doMarkHere;
+    if(!planningMode) document.getElementById('mainMarkBtn').onclick = doMarkHere;
+    const undoBtn = document.getElementById('mainUndoBtn');
+    if(undoBtn) undoBtn.onclick = undoLastPoint;
     if(num > 0) document.getElementById('mainSaveRouteBtn').onclick = doFinishRecording;
     document.getElementById('mainSettingsBtn').onclick = () => {
       buildRecordList(); buildRouteLibraryUI();
@@ -1325,8 +1353,11 @@
     const name = prompt('Name der neuen Route:', suggested);
     if(!name) return;
     if(recording.length > 0 && !confirm('Es gibt noch eine offene Aufnahme ("'+(recordingRouteName||'unbenannt')+'", '+recording.length+' Punkte). Verwerfen und neue Route starten?')) return;
+    detachPlanningClick();
     recording = [];
     recordingTrack = [];
+    recordingSegLens = [];
+    planningMode = false;
     recordingRouteId = 'route-'+Date.now();
     recordingRouteName = name;
     saveRecordingState();
@@ -1337,6 +1368,26 @@
     toast('Aufzeichnung läuft — lauf los, dann "Markierung setzen" antippen');
   };
 
+  document.getElementById('planRouteBtn').onclick = () => {
+    const suggested = 'Route ' + (Object.keys(routeLibrary).length + 1).toString().padStart(2,'0');
+    const name = prompt('Name der neuen Route:', suggested);
+    if(!name) return;
+    if(recording.length > 0 && !confirm('Es gibt noch eine offene Aufnahme ("'+(recordingRouteName||'unbenannt')+'", '+recording.length+' Punkte). Verwerfen und neue Route starten?')) return;
+    stopTrackRecording();
+    recording = [];
+    recordingTrack = [];
+    recordingSegLens = [];
+    planningMode = true;
+    recordingRouteId = 'route-'+Date.now();
+    recordingRouteName = name;
+    saveRecordingState();
+    buildRecordList();
+    buildRouteLibraryUI();
+    attachPlanningClick();
+    drawerEl.classList.remove('open');
+    toast('Tippe auf die Karte, um den Startpunkt zu setzen');
+  };
+
   function doFinishRecording(){
     if(recording.length === 0) return;
     const finalName = recordingRouteName || prompt('Name für diese Route:', 'Meine Route') || 'Meine Route';
@@ -1345,8 +1396,12 @@
     routeLibrary[finalId] = routeObj;
     saveRouteLibrary();
     stopTrackRecording();
+    detachPlanningClick();
+    clearPlanningMarkers();
     recording = [];
     recordingTrack = [];
+    recordingSegLens = [];
+    planningMode = false;
     recordingRouteId = null;
     recordingRouteName = '';
     saveRecordingState();
@@ -1361,8 +1416,12 @@
   document.getElementById('clearRecording').onclick = () => {
     if(!confirm('Aufnahme wirklich verwerfen? Alle markierten Punkte und die Spur gehen verloren.')) return;
     stopTrackRecording();
+    detachPlanningClick();
+    clearPlanningMarkers();
     recording = [];
     recordingTrack = [];
+    recordingSegLens = [];
+    planningMode = false;
     recordingRouteId = null;
     recordingRouteName = '';
     saveRecordingState();
@@ -1387,6 +1446,103 @@
   };
 
   /* ---------------- Route-Aufnahme (Recorder) ---------------- */
+  /* ---------------- Kartenplanung: Wege statt Luftlinie ---------------- */
+  async function fetchFootPath(a, b){
+    try{
+      const url = 'https://routing.openstreetmap.de/routed-foot/route/v1/foot/'
+        + a.lng + ',' + a.lat + ';' + b.lng + ',' + b.lat + '?overview=full&geometries=geojson';
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if(data.code !== 'Ok' || !data.routes || !data.routes[0]) throw new Error('keine Route gefunden');
+      return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]); // GeoJSON ist [lng,lat] -> Leaflet [lat,lng]
+    }catch(e){
+      toast('⚠️ Wege-Routing nicht verfügbar — gerade Linie verwendet');
+      return [[a.lat,a.lng],[b.lat,b.lng]];
+    }
+  }
+
+  function mapPlanningClickListener(e){
+    if(!recordingRouteId || !planningMode) return;
+    doPlanPoint(e.latlng);
+  }
+  function attachPlanningClick(){ if(map){ map.off('click', mapPlanningClickListener); map.on('click', mapPlanningClickListener); } }
+  function detachPlanningClick(){ if(map) map.off('click', mapPlanningClickListener); }
+
+  async function doPlanPoint(latlng){
+    const isStart = recording.length === 0;
+    const label = String(recording.length).padStart(2,'0');
+    const entry = {
+      id: 'wp_'+Date.now(),
+      name: isStart ? 'Start' : ('Punkt ' + label),
+      type: isStart ? 'start' : 'checkpoint',
+      instruction: isStart ? 'Start der Tour.' : ('Dies ist Punkt ' + label + '.'),
+      hypershellAction: '', funfact: '', radius: defaultRadius,
+      lat: latlng.lat, lng: latlng.lng
+    };
+
+    if(isStart){
+      recording.push(entry);
+      recordingTrack = [[latlng.lat, latlng.lng]];
+      recordingSegLens = [];
+      saveRecordingState();
+      buildRecordList();
+      renderPlanningMarkers();
+      toast('🚀 Startpunkt gesetzt — tippe den nächsten Punkt');
+      return;
+    }
+
+    toast('🧭 Weg wird berechnet …');
+    const prev = recording[recording.length - 1];
+    const seg = await fetchFootPath({ lat: prev.lat, lng: prev.lng }, { lat: latlng.lat, lng: latlng.lng });
+    const toAppend = seg.length > 1 ? seg.slice(1) : seg;
+    recording.push(entry);
+    recordingTrack = recordingTrack.concat(toAppend);
+    recordingSegLens.push(toAppend.length);
+    saveRecordingState();
+    buildRecordList();
+    if(recordTrackLine) recordTrackLine.setLatLngs(recordingTrack);
+    renderPlanningMarkers();
+    toast('📍 Punkt ' + label + ' gesetzt');
+  }
+
+  function undoLastPoint(){
+    if(recording.length === 0) return;
+    recording.pop();
+    if(planningMode){
+      if(recordingSegLens.length > 0){
+        const n = recordingSegLens.pop();
+        recordingTrack.splice(recordingTrack.length - n, n);
+      } else {
+        recordingTrack = [];
+      }
+      if(recordTrackLine) recordTrackLine.setLatLngs(recordingTrack);
+    }
+    saveRecordingState();
+    buildRecordList();
+    renderPlanningMarkers();
+    toast('↩️ Letzten Punkt entfernt');
+  }
+
+  function renderPlanningMarkers(){
+    if(!map) return;
+    recordingMarkers.forEach(m => map.removeLayer(m));
+    recordingMarkers = [];
+    recording.forEach((w,i) => {
+      const isLast = i === recording.length - 1;
+      const label = i === 0 ? 'Start' : String(i).padStart(2,'0');
+      const icon = L.divIcon({
+        className:'', html: '<div class="wp-pin ' + (isLast?'current':'dim') + '">' + label + '</div>',
+        iconSize: isLast ? [44,44] : [24,24], iconAnchor: isLast ? [22,22] : [12,12]
+      });
+      recordingMarkers.push(L.marker([w.lat, w.lng], { icon }).addTo(map));
+    });
+  }
+  function clearPlanningMarkers(){
+    recordingMarkers.forEach(m => map && map.removeLayer(m));
+    recordingMarkers = [];
+  }
+
   function startTrackRecording(){
     if(trackWatchId !== null || !('geolocation' in navigator)) return;
     trackWatchId = navigator.geolocation.watchPosition(
@@ -1572,7 +1728,7 @@
       // GPS-Watcher nach Rückkehr aus dem Hintergrund/Sperrbildschirm neu starten,
       // da mobile Browser sie beim Sperren oft stillschweigend beenden.
       stopLiveGPS(); startLiveGPS();
-      if(recordingRouteId){ stopTrackRecording(); startTrackRecording(); }
+      if(recordingRouteId && !planningMode){ stopTrackRecording(); startTrackRecording(); }
     }
   });
 
@@ -1581,7 +1737,7 @@
   openTileDb().then(db => { tileDb = db; initMap(); render(); }).catch(() => { initMap(); render(); });
   requestWakeLock();
   startLiveGPS();
-  if(recordingRouteId) startTrackRecording();
+  if(recordingRouteId && !planningMode) startTrackRecording();
 
   setTimeout(() => {
     const visited = progress.visited.length, total = route.waypoints.length;
