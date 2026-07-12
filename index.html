@@ -103,6 +103,21 @@
            Wege berechnet statt einer Luftlinie — fällt bei fehlendem
            Empfang automatisch auf eine gerade Verbindung zurück.
            Neuer "↩️ Letzten Punkt entfernen"-Button für Korrekturen.
+  v0.13.0 - Karte richtet sich im Navigationsmodus nach der eigenen
+           Blickrichtung aus (wie Google Maps): Kompass (falls vom
+           Gerät unterstützt und erlaubt) oder ersatzweise die
+           Bewegungsrichtung aus GPS-Daten dreht die Karte, sodass
+           "oben" immer die Richtung ist, in die man läuft. Eigene
+           Position zeigt jetzt einen Richtungspfeil statt nur eines
+           Punkts. Beschriftungen (Wegpunkt-Namen, Kartenhinweis)
+           drehen automatisch dagegen, damit sie lesbar bleiben.
+           Pausiert automatisch, wenn man manuell verschiebt/zoomt,
+           und setzt beim "Zurück zur Navigation" wieder ein.
+  v0.13.1 - BUGFIX: Ankunfts-Fenster schloss teils mitten in der
+           Sprachansage, weil die Auto-Schließen-Zeit nur grob
+           geschätzt war. Schließt sich jetzt erst kurz nachdem die
+           Ansage wirklich zu Ende gesprochen hat (mit Sicherheits-
+           Zeitlimit falls Sprachausgabe fehlschlägt/deaktiviert ist).
   ============================================================
 
   Einrichtung:
@@ -250,6 +265,16 @@
   .wp-tooltip::before{ border-top-color:var(--border)!important; }
   @keyframes ringpulse{ 0%{ transform:scale(.8); opacity:1; } 100%{ transform:scale(1.6); opacity:0; } }
   .me-dot{ width:16px; height:16px; border-radius:50%; background:var(--sky); border:3px solid #fff; box-shadow:0 0 0 4px rgba(111,179,217,0.3); }
+  .me-arrow{
+    position:absolute; top:-13px; left:50%;
+    transform: translateX(-50%) rotate(var(--map-counter-rotate, 0deg));
+    transform-origin: 50% 21px;
+    transition: transform .25s linear;
+    width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent;
+    border-bottom:14px solid var(--sky); filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));
+  }
+  #map{ transition: transform .25s linear; transform-origin: 50% 50%; }
+  .wp-pin, .wp-tooltip, .leaflet-control-attribution{ transform: rotate(var(--map-counter-rotate, 0deg)); transition: transform .25s linear; }
 
   /* ---------- Main scroll area (below map) ---------- */
   .main{ flex:1; overflow-y:auto; padding:16px 16px 24px; }
@@ -502,7 +527,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.12.0";
+  const APP_VERSION = "0.13.1";
 
   /* ============================================================
      DEMO-ROUTE (Platzhalter-Koordinaten, Raum Rösrath/Hoffnungsthal)
@@ -959,6 +984,67 @@
     });
   }
 
+  /* ---------------- Karte nach Blickrichtung ausrichten (wie Google Maps) ---------------- */
+  let currentHeading = 0;
+  let headingSource = null; // 'compass' | 'gps'
+  let orientationAttached = false;
+  let prevBearingPos = null;
+
+  function applyMapRotation(heading){
+    const mapEl = document.getElementById('map');
+    if(!mapEl) return;
+    mapEl.style.transform = 'rotate(' + (-heading) + 'deg)';
+    document.documentElement.style.setProperty('--map-counter-rotate', heading + 'deg');
+  }
+  function updateHeading(heading, source){
+    currentHeading = heading;
+    headingSource = source;
+    if(navModeActive && autoFollow) applyMapRotation(heading);
+  }
+  function handleOrientation(e){
+    let heading = null;
+    if(typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
+    else if(typeof e.alpha === 'number') heading = (360 - e.alpha) % 360;
+    if(heading === null || isNaN(heading)) return;
+    updateHeading(heading, 'compass');
+  }
+  async function startCompass(){
+    if(orientationAttached) return;
+    try{
+      if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+        const res = await DeviceOrientationEvent.requestPermission();
+        if(res !== 'granted') return;
+      }
+      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+      window.addEventListener('deviceorientation', handleOrientation, true);
+      orientationAttached = true;
+    }catch(e){}
+  }
+  function stopCompass(){
+    window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+    window.removeEventListener('deviceorientation', handleOrientation, true);
+    orientationAttached = false;
+  }
+  function bearingBetween(lat1,lng1,lat2,lng2){
+    const toRad = d => d*Math.PI/180, toDeg = r => r*180/Math.PI;
+    const dLng = toRad(lng2-lng1);
+    const y = Math.sin(dLng)*Math.cos(toRad(lat2));
+    const x = Math.cos(toRad(lat1))*Math.sin(toRad(lat2)) - Math.sin(toRad(lat1))*Math.cos(toRad(lat2))*Math.cos(dLng);
+    return (toDeg(Math.atan2(y,x)) + 360) % 360;
+  }
+  function updateHeadingFromGps(lat,lng){
+    if(headingSource === 'compass') { prevBearingPos = {lat,lng}; return; } // Kompass hat Vorrang, so lange er läuft
+    if(prevBearingPos){
+      const d = haversine(prevBearingPos.lat, prevBearingPos.lng, lat, lng);
+      if(d > 4){
+        updateHeading(bearingBetween(prevBearingPos.lat, prevBearingPos.lng, lat, lng), 'gps');
+        prevBearingPos = {lat,lng};
+      }
+    } else {
+      prevBearingPos = {lat,lng};
+    }
+  }
+
   function enterNavMode(){
     navModeActive = true;
     autoFollow = true;
@@ -969,10 +1055,13 @@
     if(pos) map.setView([pos.lat, pos.lng], 17); else fitRoute();
     setTimeout(() => { programmaticMove = false; map.invalidateSize(); }, 350);
     updateNavRecenterVisibility();
+    startCompass();
     render();
   }
   function exitNavMode(){
     navModeActive = false;
+    stopCompass();
+    applyMapRotation(0);
     document.querySelector('.map-wrap').classList.remove('nav-mode');
     document.getElementById('navExitBtn').style.display = 'none';
     document.getElementById('navRecenterBtn').style.display = 'none';
@@ -992,12 +1081,14 @@
       map.setView([window.__lastPos.lat, window.__lastPos.lng], Math.max(map.getZoom(), 17));
       setTimeout(() => programmaticMove = false, 350);
     }
+    applyMapRotation(currentHeading);
   }
+
 
   function updateMeMarker(lat,lng){
     if(!map) return;
     if(!meMarker){
-      const icon = L.divIcon({ className:'', html:'<div class="me-dot"></div>', iconSize:[16,16], iconAnchor:[8,8] });
+      const icon = L.divIcon({ className:'', html:'<div style="position:relative;"><div class="me-dot"></div><div class="me-arrow"></div></div>', iconSize:[16,16], iconAnchor:[8,8] });
       meMarker = L.marker([lat,lng], { icon, zIndexOffset:1000 }).addTo(map);
     } else {
       meMarker.setLatLng([lat,lng]);
@@ -1172,13 +1263,27 @@
       </div>`;
 
     els.overlay.classList.add('show');
-    document.getElementById('cardReplay').onclick = (e) => { e.stopPropagation(); speak(wp.instruction + (hasFact?'. '+wp.funfact:'')); };
+    const fullText = wp.instruction + (hasFact ? '. ' + wp.funfact : '');
+    document.getElementById('cardReplay').onclick = (e) => { e.stopPropagation(); scheduleOverlayAutoClose(fullText); };
     els.overlay.onclick = (e) => { if(e.target === els.overlay) closeOverlay(); };
-    speak(wp.instruction + (hasFact ? '. ' + wp.funfact : ''));
+    scheduleOverlayAutoClose(fullText);
+  }
 
-    const autoCloseMs = 3200 + (hasFact ? 2200 : 0) + (hasAction ? 800 : 0);
+  function scheduleOverlayAutoClose(text){
     if(overlayAutoCloseTimer) clearTimeout(overlayAutoCloseTimer);
-    overlayAutoCloseTimer = setTimeout(closeOverlay, autoCloseMs);
+    // Grobe Sicherheits-Zeit, falls die Sprachausgabe fehlschlägt oder deaktiviert ist
+    // (dann bleibt genug Zeit zum Lesen statt sich an der Sprechgeschwindigkeit zu orientieren)
+    const wordCount = (text||'').split(/\s+/).filter(Boolean).length;
+    const fallbackMs = Math.max(4500, wordCount * 480) + 4000;
+    overlayAutoCloseTimer = setTimeout(closeOverlay, fallbackMs);
+
+    if(voiceOn && 'speechSynthesis' in window && text){
+      speak(text, () => {
+        // Ansage ist wirklich zu Ende — jetzt erst kurz warten und schließen
+        if(overlayAutoCloseTimer) clearTimeout(overlayAutoCloseTimer);
+        overlayAutoCloseTimer = setTimeout(closeOverlay, 1000);
+      });
+    }
   }
 
   function closeOverlay(){
@@ -1263,14 +1368,15 @@
     if(selectedVoiceURI) sel.value = selectedVoiceURI;
   }
   if('speechSynthesis' in window){ speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); }
-  function speak(text){
-    if(!voiceOn || !('speechSynthesis' in window) || !text) return;
+  function speak(text, onEnd){
+    if(!voiceOn || !('speechSynthesis' in window) || !text){ if(onEnd) onEnd(); return; }
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'de-DE';
     const v = voices.find(v => v.voiceURI === selectedVoiceURI);
     if(v) u.voice = v;
     u.rate = 0.98;
+    if(onEnd){ u.onend = onEnd; u.onerror = onEnd; }
     speechSynthesis.speak(u);
   }
 
@@ -1278,6 +1384,7 @@
   function checkProximity(lat,lng){
     window.__lastPos = { lat, lng };
     updateMeMarker(lat,lng);
+    if(navModeActive) updateHeadingFromGps(lat,lng);
     if(navModeActive && autoFollow && map){
       programmaticMove = true;
       map.setView([lat,lng], map.getZoom() < 16 ? 17 : map.getZoom(), { animate:true });
