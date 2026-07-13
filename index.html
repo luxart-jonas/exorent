@@ -164,6 +164,23 @@
            • BUGFIX: Nochmaliges Tippen auf (fast) denselben Punkt
              beim Kartenplanen richtet jetzt nichts mehr an, statt
              ungewollt einen Punkt zu duplizieren.
+  v0.15.0 - Drei größere Korrekturen:
+           • Automatische Kompass-Ausrichtung komplett entfernt (zu
+             fehleranfällig). Stattdessen: Karte im Navigationsmodus
+             mit zwei Fingern frei drehbar, wie man es von Kartenapps
+             kennt. Beschriftungen und Punkte drehen sich dabei
+             korrekt dagegen und stehen nie schräg oder auf dem
+             Kopf. "🧭 Karte Norden" setzt die Drehung zurück.
+           • BUGFIX: Wegpunkte mussten strikt der Reihe nach erreicht
+             werden. Jetzt gilt: sobald ein späterer Punkt erreicht
+             wird, gelten alle dazwischen liegenden automatisch als
+             abgehakt — man muss nicht mehr jeden einzelnen Punkt
+             exakt treffen.
+           • Startpunkt neu gedacht: "Navigation starten" markiert
+             den Start jetzt sofort als erreicht — dort, wo man
+             gerade steht, unabhängig von der ursprünglich
+             aufgenommenen Koordinate. Kein Konfetti dafür, es geht
+             direkt weiter zu Punkt 01, auch aus großer Entfernung.
   ============================================================
 
   Einrichtung:
@@ -590,7 +607,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.14.0";
+  const APP_VERSION = "0.15.0";
 
   /* ============================================================
      Interner Platzhalter — NUR damit die App nicht abstürzt, wenn
@@ -971,7 +988,7 @@
     document.getElementById('centerBtn').onclick = fitRoute;
     document.getElementById('locateBtn').onclick = locateMe;
     document.getElementById('navExitBtn').onclick = exitNavMode;
-    document.getElementById('navNorthBtn').onclick = toggleNorthLock;
+    document.getElementById('navNorthBtn').onclick = resetMapNorth;
     document.getElementById('navRecenterBtn').onclick = recenterNav;
 
     map.on('dragstart zoomstart', () => {
@@ -1041,21 +1058,11 @@
     });
   }
 
-  /* ---------------- Karte nach Blickrichtung ausrichten (wie Google Maps) ---------------- */
-  let currentHeading = 0;   // zuletzt fest übernommene, stabile Richtung
-  let displayHeading = 0;   // tatsächlich angezeigter (geglätteter) Wert
-  let headingSource = null; // 'compass' | 'gps'
-  let orientationAttached = false;
-  let prevBearingPos = null;
-  let northLocked = false;
-  let rotationLoopId = null;
-  let reorientTimerId = null;
-  let headingSamples = [];
-
-  const REORIENT_INTERVAL_MS = 10000; // Zwischenlösung: alle 10 Sekunden neu bewerten
-  const REORIENT_MIN_CHANGE = 20;      // Grad Unterschied, der für eine Neuausrichtung nötig ist
-
-  function angleDiff(a, b){ return ((b - a + 540) % 360) - 180; }
+  /* ---------------- Karte manuell mit zwei Fingern drehen ---------------- */
+  let displayHeading = 0;   // aktuell eingestellte Kartendrehung (0 = Norden oben)
+  let gestureActive = false;
+  let gestureStartAngle = 0;
+  let gestureStartHeading = 0;
 
   function applyMapRotation(heading){
     const mapEl = document.getElementById('map');
@@ -1064,125 +1071,75 @@
     document.documentElement.style.setProperty('--map-counter-rotate', heading + 'deg');
   }
 
-  function circularMeanDeg(samples){
-    if(samples.length === 0) return null;
-    let sumSin = 0, sumCos = 0;
-    samples.forEach(h => { const r = h*Math.PI/180; sumSin += Math.sin(r); sumCos += Math.cos(r); });
-    return (Math.atan2(sumSin, sumCos) * 180/Math.PI + 360) % 360;
+  function touchAngleDeg(touches){
+    const dx = touches[1].clientX - touches[0].clientX;
+    const dy = touches[1].clientY - touches[0].clientY;
+    return Math.atan2(dy, dx) * 180 / Math.PI;
   }
-
-  // Sammelt nur Rohwerte — die eigentliche Entscheidung, ob neu ausgerichtet wird,
-  // trifft der periodische Timer weiter unten (nicht bei jedem einzelnen Sensor-Wert).
-  function updateHeading(heading, source){
-    headingSource = source;
-    headingSamples.push(heading);
-  }
-
-  function startRotationLoop(){
-    if(rotationLoopId) return;
-    rotationLoopId = setInterval(() => {
-      if(!(navModeActive && autoFollow) || northLocked) return;
-      const diff = angleDiff(displayHeading, currentHeading);
-      if(Math.abs(diff) < 0.4) return;
-      displayHeading = (displayHeading + diff * 0.15 + 360) % 360;
-      applyMapRotation(displayHeading);
-    }, 90);
-  }
-  function stopRotationLoop(){ if(rotationLoopId){ clearInterval(rotationLoopId); rotationLoopId = null; } }
-
-  function startReorientTimer(){
-    if(reorientTimerId) return;
-    reorientTimerId = setInterval(() => {
-      if(!(navModeActive && autoFollow) || northLocked){ headingSamples = []; return; }
-      const mean = circularMeanDeg(headingSamples);
-      headingSamples = [];
-      if(mean === null) return;
-      const diff = Math.abs(angleDiff(currentHeading, mean));
-      if(diff > REORIENT_MIN_CHANGE){
-        currentHeading = mean; // die sanfte Rotations-Schleife übernimmt den Übergang dorthin
-      }
-    }, REORIENT_INTERVAL_MS);
-  }
-  function stopReorientTimer(){ if(reorientTimerId){ clearInterval(reorientTimerId); reorientTimerId = null; } headingSamples = []; }
-
-  function handleOrientation(e){
-    let heading = null;
-    if(typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
-    else if(typeof e.alpha === 'number') heading = (360 - e.alpha) % 360;
-    if(heading === null || isNaN(heading)) return;
-    updateHeading(heading, 'compass');
-  }
-  async function startCompass(){
-    if(orientationAttached) return;
-    try{
-      if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
-        const res = await DeviceOrientationEvent.requestPermission();
-        if(res !== 'granted') return;
-      }
-      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-      window.addEventListener('deviceorientation', handleOrientation, true);
-      orientationAttached = true;
-    }catch(e){}
-  }
-  function stopCompass(){
-    window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
-    window.removeEventListener('deviceorientation', handleOrientation, true);
-    orientationAttached = false;
-  }
-  function bearingBetween(lat1,lng1,lat2,lng2){
-    const toRad = d => d*Math.PI/180, toDeg = r => r*180/Math.PI;
-    const dLng = toRad(lng2-lng1);
-    const y = Math.sin(dLng)*Math.cos(toRad(lat2));
-    const x = Math.cos(toRad(lat1))*Math.sin(toRad(lat2)) - Math.sin(toRad(lat1))*Math.cos(toRad(lat2))*Math.cos(dLng);
-    return (toDeg(Math.atan2(y,x)) + 360) % 360;
-  }
-  function updateHeadingFromGps(lat,lng){
-    if(headingSource === 'compass') { prevBearingPos = {lat,lng}; return; } // Kompass hat Vorrang, so lange er läuft
-    if(prevBearingPos){
-      const d = haversine(prevBearingPos.lat, prevBearingPos.lng, lat, lng);
-      if(d > 4){
-        updateHeading(bearingBetween(prevBearingPos.lat, prevBearingPos.lng, lat, lng), 'gps');
-        prevBearingPos = {lat,lng};
-      }
-    } else {
-      prevBearingPos = {lat,lng};
+  function onRotateTouchStart(e){
+    if(e.touches.length === 2){
+      gestureActive = true;
+      gestureStartAngle = touchAngleDeg(e.touches);
+      gestureStartHeading = displayHeading;
+      if(map) map.dragging.disable();
+      const mapEl = document.getElementById('map');
+      if(mapEl) mapEl.style.transition = 'none';
     }
   }
-  function toggleNorthLock(){
-    northLocked = !northLocked;
-    if(northLocked){ displayHeading = 0; applyMapRotation(0); }
-    updateNorthBtnLabel();
+  function onRotateTouchMove(e){
+    if(gestureActive && e.touches.length === 2){
+      e.preventDefault();
+      const delta = touchAngleDeg(e.touches) - gestureStartAngle;
+      displayHeading = ((gestureStartHeading - delta) % 360 + 360) % 360;
+      applyMapRotation(displayHeading);
+    }
   }
-  function updateNorthBtnLabel(){
-    const btn = document.getElementById('navNorthBtn');
-    if(!btn) return;
-    btn.textContent = northLocked ? '🧭 Nach Blickrichtung' : '🧭 Karte Norden';
+  function onRotateTouchEnd(e){
+    if(e.touches.length < 2){
+      gestureActive = false;
+      if(map) map.dragging.enable();
+      const mapEl = document.getElementById('map');
+      if(mapEl) mapEl.style.transition = '';
+    }
+  }
+  function attachRotateGesture(){
+    const el = document.getElementById('map');
+    if(!el) return;
+    el.addEventListener('touchstart', onRotateTouchStart, { passive:false });
+    el.addEventListener('touchmove', onRotateTouchMove, { passive:false });
+    el.addEventListener('touchend', onRotateTouchEnd);
+    el.addEventListener('touchcancel', onRotateTouchEnd);
+  }
+  function detachRotateGesture(){
+    const el = document.getElementById('map');
+    if(!el) return;
+    el.removeEventListener('touchstart', onRotateTouchStart);
+    el.removeEventListener('touchmove', onRotateTouchMove);
+    el.removeEventListener('touchend', onRotateTouchEnd);
+    el.removeEventListener('touchcancel', onRotateTouchEnd);
+    gestureActive = false;
+    if(map) map.dragging.enable();
   }
 
   function enterNavMode(){
     navModeActive = true;
     autoFollow = true;
-    northLocked = false;
-    headingSamples = [];
     document.querySelector('.map-wrap').classList.add('nav-mode');
     document.getElementById('navExitBtn').style.display = 'flex';
     document.getElementById('navNorthBtn').style.display = 'flex';
-    updateNorthBtnLabel();
     const pos = window.__lastPos;
     programmaticMove = true;
     if(pos) map.setView([pos.lat, pos.lng], 17); else fitRoute();
     setTimeout(() => { programmaticMove = false; map.invalidateSize(); }, 350);
     updateNavRecenterVisibility();
-    startCompass();
-    startRotationLoop();
-    startReorientTimer();
+    if(map.touchZoom) map.touchZoom.disable();
+    attachRotateGesture();
     render();
   }
   function exitNavMode(){
     navModeActive = false;
-    stopCompass();
-    stopRotationLoop();
-    stopReorientTimer();
+    detachRotateGesture();
+    if(map && map.touchZoom) map.touchZoom.enable();
     displayHeading = 0;
     applyMapRotation(0);
     document.querySelector('.map-wrap').classList.remove('nav-mode');
@@ -1205,14 +1162,10 @@
       map.setView([window.__lastPos.lat, window.__lastPos.lng], Math.max(map.getZoom(), 17));
       setTimeout(() => programmaticMove = false, 350);
     }
-    // Manuelles Antippen wertet sofort aus, statt bis zum nächsten 20s-Intervall zu warten
-    if(!northLocked){
-      const mean = circularMeanDeg(headingSamples);
-      if(mean !== null) currentHeading = mean;
-      headingSamples = [];
-      displayHeading = currentHeading;
-      applyMapRotation(displayHeading);
-    }
+  }
+  function resetMapNorth(){
+    displayHeading = 0;
+    applyMapRotation(0);
   }
 
 
@@ -1263,7 +1216,24 @@
     document.getElementById('fallbackBtn').onclick = () => {
       if(confirm('Wegpunkt "'+target.name+'" wirklich manuell bestätigen?')) triggerWaypoint(target);
     };
-    document.getElementById('navStartBtn').onclick = () => { navModeActive ? exitNavMode() : enterNavMode(); };
+    document.getElementById('navStartBtn').onclick = () => {
+      if(!navModeActive){
+        // Start gilt ab jetzt als erreicht — dort, wo das Navi mich gerade findet.
+        // Kein GPS-Abgleich mit der ursprünglich aufgenommenen Startposition nötig.
+        const startWp = route.waypoints.find(w => w.type === 'start');
+        if(startWp && !progress.visited.includes(startWp.id)){
+          progress.visited.push(startWp.id);
+          progress.xp += (TYPE_XP[startWp.type] || 10);
+          if(!progress.startedAt) progress.startedAt = Date.now();
+          saveProgress();
+          updateHUD();
+          renderWpMarkers();
+        }
+        enterNavMode();
+      } else {
+        exitNavMode();
+      }
+    };
     const cancelBtn = document.getElementById('cancelRouteBtn');
     if(cancelBtn) cancelBtn.onclick = () => {
       if(!confirm('Route wirklich abbrechen? Dein Fortschritt auf dieser Route wird zurückgesetzt.')) return;
@@ -1537,19 +1507,37 @@
       map.setView([lat,lng], 16);
       setTimeout(() => programmaticMove = false, 300);
     }
-    if(navModeActive) updateHeadingFromGps(lat,lng);
     if(navModeActive && autoFollow && map){
       programmaticMove = true;
       map.setView([lat,lng], map.getZoom() < 16 ? 17 : map.getZoom(), { animate:true });
       setTimeout(() => programmaticMove = false, 300);
     }
+
     const nIdx = nextUnvisitedIndex();
     if(nIdx === -1) return;
-    const target = route.waypoints[nIdx];
-    const d = haversine(lat,lng,target.lat,target.lng);
-    updateDistanceDisplay(target);
-    const r = target.radius || defaultRadius;
-    if(d <= r) triggerWaypoint(target);
+    updateDistanceDisplay(route.waypoints[nIdx]);
+
+    // Nicht nur den direkt nächsten Punkt prüfen, sondern auch spätere unerreichte
+    // Punkte — falls einer davon erreicht ist, gelten übersprungene Punkte
+    // automatisch als abgehakt (kein Zwang, jeden Punkt exakt zu treffen).
+    let hitIndex = -1;
+    for(let i = nIdx; i < route.waypoints.length; i++){
+      const w = route.waypoints[i];
+      if(progress.visited.includes(w.id)) continue;
+      const d = haversine(lat, lng, w.lat, w.lng);
+      const r = w.radius || defaultRadius;
+      if(d <= r){ hitIndex = i; break; }
+    }
+    if(hitIndex === -1) return;
+
+    if(hitIndex > nIdx){
+      for(let i = nIdx; i < hitIndex; i++){
+        const skipped = route.waypoints[i];
+        if(!progress.visited.includes(skipped.id)) progress.visited.push(skipped.id);
+      }
+      saveProgress(); updateHUD(); renderWpMarkers();
+    }
+    triggerWaypoint(route.waypoints[hitIndex]);
   }
 
   function startLiveGPS(){
