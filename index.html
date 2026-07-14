@@ -181,6 +181,19 @@
              gerade steht, unabhängig von der ursprünglich
              aufgenommenen Koordinate. Kein Konfetti dafür, es geht
              direkt weiter zu Punkt 01, auch aus großer Entfernung.
+  v0.16.0 - Drei kleinere Korrekturen:
+           • Neuer Button "Alle Kartenkacheln löschen" in den
+             Einstellungen (unter "Offline-Karte") — löscht den
+             kompletten Offline-Kachel-Speicher, u.a. um zu prüfen,
+             ob ein Kartenproblem an alten/beschädigten Kacheln liegt.
+           • BUGFIX: Pinch-to-Zoom mit zwei Fingern ging im
+             Navigationsmodus nicht mehr, seit die Zwei-Finger-Drehung
+             eingebaut wurde (beide nutzten dieselbe Geste, Zoom wurde
+             beim Drehen deaktiviert, aber nie ersetzt). Jetzt sind
+             Drehen und Zoomen in derselben Zwei-Finger-Geste
+             kombiniert — genau wie bei Google Maps.
+           • Streckenfarbe auf der Karte von Hellblau auf Knallrot
+             geändert.
   ============================================================
 
   Einrichtung:
@@ -562,6 +575,7 @@
     <button class="btn-block accent" id="downloadTiles">Karte offline speichern</button>
     <div class="tile-progress-wrap"><div class="tile-progress-fill" id="tileProgressFill"></div></div>
     <div class="status-line" id="tileStatus">Noch keine Offline-Kacheln gespeichert.</div>
+    <button class="btn-block" id="clearTiles" style="margin-top:8px; background:none; border:1px solid var(--line); color:var(--muted);">Alle Kartenkacheln löschen</button>
 
     <div class="section-label">Ansage &amp; Sound</div>
     <div class="row">
@@ -607,7 +621,7 @@
 <script>
 (function(){
 
-  const APP_VERSION = "0.15.0";
+  const APP_VERSION = "0.16.0";
 
   /* ============================================================
      Interner Platzhalter — NUR damit die App nicht abstürzt, wenn
@@ -957,13 +971,34 @@
     status.textContent = '✅ Bereit für Offline-Nutzung · ' + total + ' Kacheln gespeichert';
   }
 
+  async function clearAllTiles(){
+    if(!confirm('Wirklich alle gespeicherten Kartenkacheln löschen? Danach werden sie bei Bedarf neu geladen.')) return;
+    const btn = document.getElementById('clearTiles');
+    btn.textContent = 'Lösche…';
+    btn.disabled = true;
+    await new Promise(resolve => {
+      if(!tileDb){ resolve(); return; }
+      const tx = tileDb.transaction('tiles','readwrite');
+      tx.objectStore('tiles').clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+    // Also clear the "already downloaded for this route" flags so the offline button offers a fresh download.
+    Object.keys(localStorage).filter(k => k.startsWith('exotrail_tiles_done_')).forEach(k => localStorage.removeItem(k));
+    document.getElementById('tileStatus').textContent = 'Noch keine Offline-Kacheln gespeichert.';
+    document.getElementById('tileProgressFill').style.width = '0%';
+    btn.textContent = 'Alle Kartenkacheln löschen';
+    btn.disabled = false;
+    toast('Kartenkacheln gelöscht 🗑️');
+  }
+
   /* ---------------- Map setup ---------------- */
   function routeLineCoords(r){
     return (r.track && r.track.length > 1) ? r.track : r.waypoints.map(w => [w.lat, w.lng]);
   }
 
   function initMap(){
-    map = L.map('map', { zoomControl:false, attributionControl:true, maxZoom:21 }).setView([route.waypoints[0].lat, route.waypoints[0].lng], 15);
+    map = L.map('map', { zoomControl:false, attributionControl:true, maxZoom:21, zoomSnap:0.25, zoomDelta:1 }).setView([route.waypoints[0].lat, route.waypoints[0].lng], 15);
     new OfflineTileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 21, maxNativeZoom: 19, attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
@@ -972,7 +1007,7 @@
       color:'#ffffff', weight:9, opacity:0.35, lineCap:'round', lineJoin:'round'
     }).addTo(map);
     routeLine = L.polyline(routeLineCoords(route), {
-      color:'#38bdf8', weight:5, opacity:0.95, lineCap:'round', lineJoin:'round'
+      color:'#ff1a1a', weight:5, opacity:0.95, lineCap:'round', lineJoin:'round'
     }).addTo(map);
 
     recordTrackLine = L.polyline(recordingTrack, { color:'#6fd9a8', weight:5, opacity:0.85, lineCap:'round', lineJoin:'round' }).addTo(map);
@@ -1063,6 +1098,8 @@
   let gestureActive = false;
   let gestureStartAngle = 0;
   let gestureStartHeading = 0;
+  let gestureStartDist = 0;
+  let gestureStartZoom = 0;
 
   function applyMapRotation(heading){
     const mapEl = document.getElementById('map');
@@ -1076,11 +1113,18 @@
     const dy = touches[1].clientY - touches[0].clientY;
     return Math.atan2(dy, dx) * 180 / Math.PI;
   }
+  function touchDist(touches){
+    const dx = touches[1].clientX - touches[0].clientX;
+    const dy = touches[1].clientY - touches[0].clientY;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
   function onRotateTouchStart(e){
     if(e.touches.length === 2){
       gestureActive = true;
       gestureStartAngle = touchAngleDeg(e.touches);
       gestureStartHeading = displayHeading;
+      gestureStartDist = touchDist(e.touches);
+      gestureStartZoom = map ? map.getZoom() : 0;
       if(map) map.dragging.disable();
       const mapEl = document.getElementById('map');
       if(mapEl) mapEl.style.transition = 'none';
@@ -1092,6 +1136,18 @@
       const delta = touchAngleDeg(e.touches) - gestureStartAngle;
       displayHeading = ((gestureStartHeading - delta) % 360 + 360) % 360;
       applyMapRotation(displayHeading);
+
+      // Pinch-to-zoom, combined into the same two-finger gesture (Leaflet's own
+      // touchZoom is disabled during nav mode to avoid both handlers fighting
+      // over the same touch events, so zoom has to happen here instead).
+      if(map){
+        const dist = touchDist(e.touches);
+        if(gestureStartDist > 0){
+          const zoomDelta = Math.log2(dist / gestureStartDist);
+          const targetZoom = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), gestureStartZoom + zoomDelta));
+          map.setZoom(targetZoom, { animate:false });
+        }
+      }
     }
   }
   function onRotateTouchEnd(e){
@@ -1571,6 +1627,7 @@
   };
   document.getElementById('closeDrawer').onclick = () => { drawerEl.classList.remove('open'); if(map) setTimeout(() => map.invalidateSize(), 100); };
   document.getElementById('downloadTiles').onclick = downloadOfflineTiles;
+  document.getElementById('clearTiles').onclick = clearAllTiles;
 
   function doMarkHere(){
     if(!recordingRouteId){ toast('Bitte zuerst oben "Neue Route erstellen" oder eine Route zum Bearbeiten öffnen'); return; }
