@@ -2,215 +2,9 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>ExoTrail — Mission Rösrath</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<!--
-  ============================================================
-  EXOTRAIL NAVI — Prototyp für ExoRent
-  Aktuelle Version: siehe APP_VERSION im <script> unten,
-  und sichtbar unten in den Einstellungen.
-  ============================================================
-  CHANGELOG
-  v0.3.0 - Erste Version: Trail-Spine, GPS-Geofencing, TTS, Test-Modus
-  v0.4.0 - Echte OSM-Karte (Leaflet), Offline-Kacheln, Gamification
-           (XP/Ränge/Konfetti/Sound), größere Wegpunkt-Pins & Chips
-  v0.5.0 - Route-Recorder in den Einstellungen ("Hier markieren")
-  v0.5.1 - Standort-Button (echte Position statt nur Routen-Zoom)
-  v0.6.0 - Formular öffnet sofort (nicht mehr GPS-abhängig),
-           Koordinaten manuell editierbar, GPS läuft im Hintergrund
-  v0.6.1 - BUGFIX: Eingabefenster lag hinter dem Einstellungen-Menü
-           (z-index) und war dadurch unsichtbar. Menü schließt sich
-           jetzt automatisch beim Öffnen des Formulars.
-  v0.7.0 - Mehrere gespeicherte Routen ("Meine Routen"): auswählen,
-           aktivieren, bestehende Route bearbeiten (weitere Punkte
-           ergänzen) und löschen. Aufnahme-Fortschritt ist jetzt an
-           eine konkrete Route gebunden und übersteht das Schließen
-           der App zwischen zwei Aufnahme-Sitzungen.
-  v0.7.1 - BUGFIX: Ankunfts-Fenster (Konfetti/XP) lag hinter dem
-           Einstellungen-Menü und war unsichtbar — Fortschritt wurde
-           dabei trotzdem im Hintergrund gespeichert (führte dazu,
-           dass Routen ungesehen sofort als "abgeschlossen" galten).
-           Menü schließt sich jetzt automatisch bei jeder Ankunft.
-  v0.7.2 - Klarstellung: Fortschritt wurde schon vorher automatisch
-           gespeichert (kein Reset beim Schließen/Öffnen) — jetzt
-           sichtbar bestätigt per Start-Toast ("Weiter geht's: Punkt
-           X von Y"). "Neue Runde starten" fragt jetzt zur Sicherheit
-           nach, da es den Fortschritt absichtlich zurücksetzt.
-  v0.8.0 - BUGFIX: Karte blieb nach Schließen von Ankunfts-Fenster
-           oder Einstellungen manchmal falsch vermessen (Leaflet
-           invalidateSize ergänzt). Neuer Hinweis-Banner auf der
-           Karte, falls Kartenkacheln nicht laden (offline/kein
-           Empfang) statt einfach nur "dunkel" zu bleiben. Ankunfts-
-           Fenster ist jetzt leicht transparent statt komplett
-           blickdicht.
-  v0.9.0 - Große Aufnahme-Überarbeitung:
-           • Echte GPS-Spur statt Luftlinie: während der Aufnahme
-             läuft ein eigener Track-Recorder mit, der den real
-             gelaufenen Weg aufzeichnet (min. alle 6m ein Punkt).
-             Die Route zeigt jetzt diese Spur statt gerader Linien.
-           • Schnelles Markieren: "Hier markieren" speichert sofort
-             durchnummeriert (Punkt 01, 02, ...) mit automatischer
-             Sprachansage "Dies ist Punkt 01." — kein Formular mehr
-             unterwegs nötig. Bearbeiten (Name, Typ, echte Ansage,
-             Hypershell-Aktion, Fun Fact) geht jederzeit später per
-             ✏️ in der Punkte-Liste.
-           • Echter Navigationsmodus: "🧭 Navigation starten" zeigt
-             die Karte groß und zentriert automatisch auf die
-             eigene Position. Wer rauszoomt/verschiebt, sieht einen
-             "🎯 Zurück zur Navigation"-Button zum Wiederandocken.
-  v0.9.1 - Aufnahme-Modus jetzt direkt in der Hauptansicht: sobald
-           eine Route in Bearbeitung ist, zeigt der Hauptbildschirm
-           automatisch "📍 Markierung setzen" und "✅ Route speichern" —
-           kein Umweg mehr über die Einstellungen während des Laufens.
-  v0.10.0 - Feinschliff Navigation:
-           • Ankunfts-Fenster schließt jetzt automatisch nach kurzer
-             Zeit (kein "Weiter geht's!"-Button mehr nötig) und
-             springt direkt zurück in die Navigationskarte. Tippen
-             auf den dunklen Rand schließt es auch sofort.
-           • Startpunkt löst kein Feier-Fenster/Konfetti mehr aus —
-             direkt weiter zu Punkt 01.
-           • Erste Markierung heißt jetzt automatisch "Start", erst
-             die zweite wird "Punkt 01" (Start zählt nicht mit).
-           • Bereits erreichte Punkte werden auf der Karte kleiner
-             dargestellt für mehr Übersicht.
-           • Neuer "🛑 Route abbrechen"-Button (setzt Fortschritt
-             der aktiven Route zurück, fragt vorher nach).
-           • Routenlinie jetzt in kräftigem Hellblau mit weißer
-             Kontur für deutlich bessere Lesbarkeit auf der Karte.
-  v0.11.0 - Aufgeräumt & vereinfacht:
-           • Test-Modus, Demo-Route-Button und "Fortschritt
-             zurücksetzen" entfernt (nicht mehr gebraucht — "Route
-             abbrechen" auf dem Hauptbildschirm deckt das ab).
-           • Karten-Punkte radikal vereinfacht: nur der aktuelle
-             Zielpunkt ist groß+beschriftet, alle anderen sind klein
-             und zart mit reiner Nummerierung (Start, 01, 02, 03…).
-           • Tiefer reinzoomen möglich (bis Zoomstufe 21, über die
-             OSM-Kachelauflösung hinaus hochskaliert).
-           • BEKANNTE GRENZE: Sobald das Handy gesperrt oder die App
-             in den Hintergrund geschickt wird, pausieren mobile
-             Browser die GPS-Aufzeichnung — das ist eine Grenze von
-             Web-Apps (kein Vollzugriff wie bei nativen Apps), lässt
-             sich technisch nicht umgehen. Die App versucht jetzt
-             zumindest, GPS und Track-Aufnahme beim Zurückkommen
-             automatisch neu zu starten, statt hängen zu bleiben.
-  v0.12.0 - Neuer Menüpunkt "🗺️ Karte am Handy erstellen": Route
-           komplett am Schreibtisch planen, ohne sie abzulaufen.
-           Tippen auf die Karte setzt Start und weitere Punkte
-           (Beschriftung wie beim Laufen: Start, 01, 02, 03…).
-           Zwischen den Punkten wird die Strecke per Routing-Service
-           (routing.openstreetmap.de, Fuß-Profil) entlang echter
-           Wege berechnet statt einer Luftlinie — fällt bei fehlendem
-           Empfang automatisch auf eine gerade Verbindung zurück.
-           Neuer "↩️ Letzten Punkt entfernen"-Button für Korrekturen.
-  v0.13.0 - Karte richtet sich im Navigationsmodus nach der eigenen
-           Blickrichtung aus (wie Google Maps): Kompass (falls vom
-           Gerät unterstützt und erlaubt) oder ersatzweise die
-           Bewegungsrichtung aus GPS-Daten dreht die Karte, sodass
-           "oben" immer die Richtung ist, in die man läuft. Eigene
-           Position zeigt jetzt einen Richtungspfeil statt nur eines
-           Punkts. Beschriftungen (Wegpunkt-Namen, Kartenhinweis)
-           drehen automatisch dagegen, damit sie lesbar bleiben.
-           Pausiert automatisch, wenn man manuell verschiebt/zoomt,
-           und setzt beim "Zurück zur Navigation" wieder ein.
-  v0.13.1 - BUGFIX: Ankunfts-Fenster schloss teils mitten in der
-           Sprachansage, weil die Auto-Schließen-Zeit nur grob
-           geschätzt war. Schließt sich jetzt erst kurz nachdem die
-           Ansage wirklich zu Ende gesprochen hat (mit Sicherheits-
-           Zeitlimit falls Sprachausgabe fehlschlägt/deaktiviert ist).
-  v0.13.2 - Kartendrehung überarbeitet:
-           • BUGFIX: schwarze Ecken beim Drehen behoben — Karte ist
-             jetzt größer als ihr Fenster angelegt, sodass beim
-             Rotieren immer alles ausgefüllt bleibt.
-           • Drehung deutlich sanfter: Kompass-/GPS-Richtung wird
-             jetzt geglättet und nur alle ~90ms in kleinen Schritten
-             nachgeführt, statt bei jedem Sensor-Event hart zu
-             springen (das verursachte das Ruckeln).
-           • Neuer "🧭 Karte Norden"-Button oben rechts im
-             Navigationsmodus: sperrt die Karte auf die gewohnte
-             Nordausrichtung (wie vorher). Nochmal antippen
-             ("🧭 Nach Blickrichtung") aktiviert die Drehung wieder.
-  v0.13.3 - Toleranzzone gegen Wackeln im Stand: die Karte richtet
-           sich jetzt erst neu aus, wenn sich die Richtung um mehr
-           als 12° ändert. Kleinere Schwankungen (Kompass-Rauschen
-           beim Stillstehen) werden komplett ignoriert, statt jede
-           kleine Zitterbewegung nachzuverfolgen. Bei einer echten
-           Drehung (>12°) schwenkt die Karte weiterhin sanft mit.
-  v0.13.4 - Wackeln im Navigationsmodus grundlegend behoben: statt
-           bei jedem Sensor-Wert sofort zu reagieren, sammelt die
-           App jetzt fortlaufend Richtungswerte und bewertet nur
-           noch alle 20 Sekunden, ob sich die Richtung wirklich um
-           mehr als 20° geändert hat (Kreis-Mittelwert der Werte
-           aus diesem Zeitraum). Nur dann dreht sich die Karte
-           sanft nach. "Zurück zur Navigation" wertet bei Bedarf
-           sofort neu aus, statt bis zum nächsten 20s-Takt zu warten.
-  v0.14.0 - Fünf Korrekturen:
-           • Hoffnungsthal-Demo-Route endgültig entfernt (auch
-             automatische Bereinigung für bereits gespeicherte
-             Reste aus früheren Versionen). Ohne eigene Route zeigt
-             die App jetzt einen klaren "Noch keine Route"-Hinweis
-             statt einer Platzhalter-Route.
-           • Dreh-Intervall der Navigationskarte als Zwischenlösung
-             von 20 auf 10 Sekunden verkürzt.
-           • BUGFIX: Wegpunkt-Beschriftungen standen beim Drehen
-             schräg, weil Leaflets eigene Positionierung und unsere
-             Gegenrotation dieselbe Eigenschaft am selben Element
-             überschrieben haben. Jetzt trägt ein eigenes inneres
-             Element die Gegenrotation — Beschriftungen bleiben
-             beim Drehen immer aufrecht lesbar.
-           • Karte zentriert sich jetzt automatisch auf die echte
-             Position, sobald der erste GPS-Fixpunkt da ist — kein
-             Antippen des Finden-Knopfs mehr nötig.
-           • BUGFIX: Nochmaliges Tippen auf (fast) denselben Punkt
-             beim Kartenplanen richtet jetzt nichts mehr an, statt
-             ungewollt einen Punkt zu duplizieren.
-  v0.15.0 - Drei größere Korrekturen:
-           • Automatische Kompass-Ausrichtung komplett entfernt (zu
-             fehleranfällig). Stattdessen: Karte im Navigationsmodus
-             mit zwei Fingern frei drehbar, wie man es von Kartenapps
-             kennt. Beschriftungen und Punkte drehen sich dabei
-             korrekt dagegen und stehen nie schräg oder auf dem
-             Kopf. "🧭 Karte Norden" setzt die Drehung zurück.
-           • BUGFIX: Wegpunkte mussten strikt der Reihe nach erreicht
-             werden. Jetzt gilt: sobald ein späterer Punkt erreicht
-             wird, gelten alle dazwischen liegenden automatisch als
-             abgehakt — man muss nicht mehr jeden einzelnen Punkt
-             exakt treffen.
-           • Startpunkt neu gedacht: "Navigation starten" markiert
-             den Start jetzt sofort als erreicht — dort, wo man
-             gerade steht, unabhängig von der ursprünglich
-             aufgenommenen Koordinate. Kein Konfetti dafür, es geht
-             direkt weiter zu Punkt 01, auch aus großer Entfernung.
-  v0.16.0 - Drei kleinere Korrekturen:
-           • Neuer Button "Alle Kartenkacheln löschen" in den
-             Einstellungen (unter "Offline-Karte") — löscht den
-             kompletten Offline-Kachel-Speicher, u.a. um zu prüfen,
-             ob ein Kartenproblem an alten/beschädigten Kacheln liegt.
-           • BUGFIX: Pinch-to-Zoom mit zwei Fingern ging im
-             Navigationsmodus nicht mehr, seit die Zwei-Finger-Drehung
-             eingebaut wurde (beide nutzten dieselbe Geste, Zoom wurde
-             beim Drehen deaktiviert, aber nie ersetzt). Jetzt sind
-             Drehen und Zoomen in derselben Zwei-Finger-Geste
-             kombiniert — genau wie bei Google Maps.
-           • Streckenfarbe auf der Karte von Hellblau auf Knallrot
-             geändert.
-  ============================================================
-
-  Einrichtung:
-  1. Datei in "index.html" umbenennen, auf GitHub Pages hosten
-  2. Vor Kundenübergabe: App einmal MIT WLAN/Empfang öffnen und in
-     den Einstellungen auf "Karte offline speichern" tippen — lädt
-     alle Kartenausschnitte der Route für Offline-Nutzung
-  3. Neue Route: entweder ablaufen ("Neue Route erstellen") oder
-     direkt auf der Karte antippen ("Karte am Handy erstellen") —
-     beides unter Einstellungen -> "Meine Routen".
-  4. Hinweis Kartenkacheln: OpenStreetMap erlaubt normale Nutzung
-     im Browser (auch für kleine Business-Cases) kostenlos. Falls du
-     später viele Geräte/Kunden gleichzeitig hast, lohnt sich ein
-     eigener Tile-Anbieter (z.B. MapTiler Free-Tier) statt der
-     öffentlichen tile.openstreetmap.org Server.
-  ============================================================
--->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<title>ExoTrail Navi · MapLibre-Test v0.6.0</title>
+<link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet">
 <style>
   :root{
     --bg: #0c1210;
@@ -219,1854 +13,410 @@
     --gold: #d9a53f;
     --gold-bright: #f0be5c;
     --mint: #6fd9a8;
-    --mint-bright: #8ef0c0;
     --coral: #ff8f66;
     --sky: #6fb3d9;
     --text: #f1efe4;
     --text-dim: #9a9d8f;
-    --text-faint: #5c6058;
     --danger: #ff7a63;
     --border: rgba(217,165,63,0.2);
-    --border-soft: rgba(241,239,228,0.09);
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
-
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html,body{
-    margin:0; padding:0; height:100%;
-    background:var(--bg); color:var(--text);
-    font-family:var(--sans);
-    overscroll-behavior:none;
-    user-select:none; -webkit-user-select:none;
-  }
-  body{
-    background-image:
-      radial-gradient(ellipse 120% 50% at 50% -10%, rgba(111,217,168,0.10), transparent 60%),
-      radial-gradient(ellipse 100% 50% at 50% 110%, rgba(217,165,63,0.06), transparent 60%);
-  }
+  html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--text); font-family:var(--sans); overscroll-behavior:none; }
+  #app{ position:fixed; inset:0; display:flex; flex-direction:column; }
 
-  #app{ height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+  header{
+    flex:none; padding:12px 16px; display:flex; align-items:center; justify-content:space-between;
+    background:var(--bg-panel); border-bottom:1px solid var(--border); z-index:5;
+  }
+  header .title{ font-weight:800; color:var(--gold-bright); font-size:14px; }
+  header .sub{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+  header .badge{ font-size:10px; color:var(--bg); background:var(--gold); padding:3px 8px; border-radius:20px; font-weight:800; }
 
-  /* ---------- Top bar ---------- */
-  .topbar{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:calc(env(safe-area-inset-top) + 12px) 16px 10px;
-    flex-shrink:0; gap:10px;
-  }
-  .brand{ display:flex; align-items:center; gap:10px; min-width:0; }
-  .mascot-avatar{
-    width:40px; height:40px; border-radius:50%; background:var(--bg-elevated);
-    border:2px solid var(--gold); display:flex; align-items:center; justify-content:center;
-    font-size:20px; flex-shrink:0;
-  }
-  .brand-info{ min-width:0; }
-  .rank-name{ font-size:13px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .xp-bar-wrap{ width:120px; height:6px; border-radius:4px; background:var(--bg-elevated); margin-top:4px; overflow:hidden; }
-  .xp-bar-fill{ height:100%; background:linear-gradient(90deg, var(--gold), var(--mint-bright)); border-radius:4px; transition:width .5s ease; }
-  .gps-pill{
-    display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:20px;
-    background:var(--bg-elevated); border:1px solid var(--border-soft); flex-shrink:0;
-  }
-  .gps-dot{ width:8px; height:8px; border-radius:50%; background:var(--text-faint); }
-  .gps-dot.live{ background:var(--mint-bright); box-shadow:0 0 6px var(--mint-bright); }
-  .gps-dot.sim{ background:var(--gold-bright); box-shadow:0 0 6px var(--gold-bright); animation:blink 1.4s infinite; }
-  @keyframes blink{ 50%{ opacity:.3; } }
-  .gps-label{ font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); }
-  .icon-btn{
-    width:38px; height:38px; border-radius:12px; flex-shrink:0;
-    background:var(--bg-elevated); border:1px solid var(--border-soft);
-    display:flex; align-items:center; justify-content:center;
-    color:var(--text-dim); cursor:pointer;
-  }
-  .icon-btn:active{ background:var(--bg-panel); }
-  .icon-btn svg{ width:18px; height:18px; }
+  #mapWrap{ flex:1; position:relative; min-height:0; }
+  #map{ position:absolute; inset:0; }
 
-  /* ---------- Map ---------- */
-  .map-wrap{ flex-shrink:0; margin:0 16px; border-radius:20px; overflow:hidden; border:1px solid var(--border); position:relative; height:38vh; min-height:220px; }
-  #map{
-    position:absolute; top:50%; left:50%; width:200%; height:200%;
-    background:#141a15; transform:translate(-50%,-50%) rotate(0deg); transform-origin:50% 50%;
+  .map-btn{
+    position:absolute; width:44px; height:44px; border-radius:50%;
+    background:var(--bg-elevated); border:1.5px solid var(--border); color:var(--gold-bright);
+    display:flex; align-items:center; justify-content:center; font-size:18px; cursor:pointer;
+    box-shadow:0 3px 10px rgba(0,0,0,.5); z-index:4;
   }
-  .map-center-btn{
-    position:absolute; bottom:10px; right:10px; z-index:410;
-    width:38px; height:38px; border-radius:50%; background:var(--bg-elevated);
-    border:1px solid var(--border); display:flex; align-items:center; justify-content:center;
-    color:var(--gold-bright); box-shadow:0 4px 12px rgba(0,0,0,.4);
+  #centerBtn{ right:12px; bottom:100px; }
+  #locateBtn{ right:12px; bottom:48px; }
+  #northBtn{ right:12px; top:12px; }
+
+  #statusBar{
+    position:absolute; left:12px; bottom:12px; right:68px; z-index:4;
+    background:rgba(21,29,24,0.92); border:1px solid var(--border); border-radius:10px;
+    padding:10px 12px; font-size:12px; color:var(--text-dim); backdrop-filter:blur(6px);
   }
-  .map-center-btn svg{ width:18px; height:18px; }
-  .tile-warning{
-    display:none; position:absolute; bottom:10px; left:10px; right:56px; z-index:410;
-    background:rgba(28,20,10,0.92); border:1px solid var(--gold); color:var(--gold-bright);
-    font-size:11.5px; font-weight:700; padding:9px 12px; border-radius:12px;
-    align-items:center; gap:6px; box-shadow:0 4px 12px rgba(0,0,0,.4);
-  }
-  .map-wrap.nav-mode{ height:66vh; transition:height .4s ease; border-color:var(--mint); }
-  .nav-exit-btn{
-    position:absolute; top:10px; left:10px; z-index:415;
-    background:rgba(12,18,16,0.85); border:1px solid var(--border); color:var(--text);
-    font-family:var(--sans); font-size:12px; font-weight:700; padding:9px 13px; border-radius:20px;
-    cursor:pointer; display:flex; align-items:center; gap:5px;
-  }
-  .nav-north-btn{
-    position:absolute; top:10px; right:10px; z-index:415;
-    background:rgba(12,18,16,0.85); border:1px solid var(--border); color:var(--gold-bright);
-    font-family:var(--sans); font-size:11.5px; font-weight:700; padding:9px 12px; border-radius:20px;
-    cursor:pointer; display:flex; align-items:center; gap:5px; white-space:nowrap;
-  }
-  .nav-recenter-btn{
-    position:absolute; bottom:10px; left:50%; transform:translateX(-50%); z-index:415;
-    background:var(--mint); color:#0c1210; border:none; font-family:var(--sans);
-    font-size:13px; font-weight:800; padding:11px 18px; border-radius:24px;
-    cursor:pointer; display:flex; align-items:center; gap:6px;
-    box-shadow:0 4px 14px rgba(0,0,0,.5); animation:navpulse 1.6s infinite;
-  }
-  @keyframes navpulse{ 50%{ box-shadow:0 4px 14px rgba(111,217,168,.5); } }
-  .leaflet-container{ background:#141a15; font-family:var(--sans); }
-  .leaflet-control-attribution{ background:rgba(12,18,16,0.7)!important; color:var(--text-faint)!important; font-size:9px!important; }
-  .leaflet-control-attribution a{ color:var(--text-dim)!important; }
+  #statusBar b{ color:var(--gold-bright); }
+
   .wp-pin{
     display:flex; align-items:center; justify-content:center;
-    font-family:var(--mono); font-weight:800;
-    border-radius:50%;
+    font-family:var(--mono); font-weight:800; border-radius:50%;
     filter:drop-shadow(0 3px 7px rgba(0,0,0,.6));
   }
-  .wp-pin.current{
-    font-size:15px; width:44px; height:44px;
-    background:var(--bg-elevated); border:2.5px solid var(--gold); color:var(--gold-bright);
-  }
-  .wp-pin.dim{
-    font-size:9.5px; width:24px; height:24px;
-    background:rgba(28,31,21,0.75); border:1.5px solid rgba(217,165,63,0.35); color:var(--text-dim);
-    opacity:.7;
-  }
+  .wp-pin.current{ font-size:15px; width:44px; height:44px; background:var(--bg-elevated); border:2.5px solid var(--gold); color:var(--gold-bright); }
+  .wp-pin.dim{ font-size:9.5px; width:24px; height:24px; background:rgba(28,31,21,0.75); border:1.5px solid rgba(217,165,63,0.35); color:var(--text-dim); opacity:.75; }
+  .wp-pin-wrap{ position:relative; }
   .wp-pin-ring{ position:absolute; inset:-6px; border-radius:50%; border:2px solid var(--gold-bright); animation:ringpulse 1.8s infinite; }
-  .wp-tooltip{
-    background:transparent!important; border:none!important; box-shadow:none!important; padding:0!important;
-  }
-  .wp-tooltip::before{ display:none!important; }
-  .wp-tooltip-box{
-    display:inline-block;
-    background:var(--bg-elevated); color:var(--text);
-    border:1px solid var(--border); border-radius:9px;
-    font-size:12px; font-weight:800; padding:5px 10px;
-    box-shadow:0 3px 10px rgba(0,0,0,.45); white-space:nowrap;
-    transform: rotate(var(--map-counter-rotate, 0deg));
-    transform-origin: 50% 50%;
-    transition: transform .12s linear;
-  }
   @keyframes ringpulse{ 0%{ transform:scale(.8); opacity:1; } 100%{ transform:scale(1.6); opacity:0; } }
+  .wp-tooltip-box{
+    position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%);
+    display:inline-block; background:var(--bg-elevated); color:var(--text);
+    border:1px solid var(--border); border-radius:9px; font-size:12px; font-weight:800;
+    padding:5px 10px; box-shadow:0 3px 10px rgba(0,0,0,.45); white-space:nowrap; pointer-events:none;
+  }
+
+  .me-wrap{ position:relative; width:16px; height:16px; }
   .me-dot{ width:16px; height:16px; border-radius:50%; background:var(--sky); border:3px solid #fff; box-shadow:0 0 0 4px rgba(111,179,217,0.3); }
   .me-arrow{
-    position:absolute; top:-13px; left:50%;
-    transform: translateX(-50%) rotate(var(--map-counter-rotate, 0deg));
-    transform-origin: 50% 21px;
+    position:absolute; top:-13px; left:50%; transform-origin:50% 21px;
     transition: transform .25s linear;
     width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent;
     border-bottom:14px solid var(--sky); filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));
   }
-  #map{ transition: transform .12s linear; }
-  .wp-pin, .leaflet-control-attribution{ transform: rotate(var(--map-counter-rotate, 0deg)); transition: transform .12s linear; }
 
-  /* ---------- Main scroll area (below map) ---------- */
-  .main{ flex:1; overflow-y:auto; padding:16px 16px 24px; }
+  .maplibregl-ctrl-attrib{ font-size:9px !important; }
 
-  /* Quest hero card */
-  .quest-card{
-    background:var(--bg-panel); border:1px solid var(--border); border-radius:20px;
-    padding:18px 18px 16px; margin-bottom:16px;
+  #emptyState{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:10px; text-align:center; padding:30px; z-index:3;
   }
-  .quest-eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--mint-bright); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
-  .quest-dist{ font-family:var(--mono); font-size:44px; font-weight:700; line-height:1; letter-spacing:-.02em; }
-  .quest-dist span{ font-size:18px; color:var(--text-dim); font-weight:400; margin-left:4px; }
-  .quest-name{ font-size:15px; color:var(--text-dim); margin-top:8px; }
-  .quest-name b{ color:var(--text); }
-
-  /* Step chips (mini quest trail) */
-  .chips-scroll{ display:flex; gap:8px; overflow-x:auto; padding:2px 2px 8px; margin-bottom:6px; }
-  .chips-scroll::-webkit-scrollbar{ display:none; }
-  .step-chip{
-    flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:7px;
-    width:86px; padding:14px 8px; border-radius:18px; background:var(--bg-panel);
-    border:1px solid var(--border-soft); opacity:.55;
-  }
-  .step-chip.current{ opacity:1; border-color:var(--gold); background:var(--bg-elevated); box-shadow:0 0 0 2px var(--gold); transform:scale(1.05); }
-  .step-chip.done{ opacity:.9; border-color:rgba(111,217,168,0.4); }
-  .step-chip-icon{ font-size:30px; }
-  .step-chip-name{ font-size:11.5px; text-align:center; line-height:1.25; color:var(--text-dim); font-weight:600; }
-  .step-chip.current .step-chip-name{ color:var(--text); font-weight:700; }
-  .step-chip-xp{ font-family:var(--mono); font-size:9px; color:var(--gold-bright); }
-
-  .fallback-btn{
-    margin-top:6px; width:100%; padding:13px; border-radius:14px;
-    background:transparent; border:1px dashed var(--border-soft);
-    color:var(--text-faint); font-family:var(--sans); font-size:12.5px;
-    cursor:pointer;
-  }
-  .fallback-btn:active{ background:var(--bg-panel); }
-
-  /* ---------- Trigger overlay ---------- */
-  .overlay{
-    position:fixed; inset:0; z-index:950;
-    background:rgba(6,9,7,0.82); backdrop-filter:blur(5px);
-    display:flex; align-items:flex-end; justify-content:center;
-    opacity:0; pointer-events:none; transition:opacity .35s;
-  }
-  .overlay.show{ opacity:1; pointer-events:auto; }
-  .card{
-    width:100%; max-width:520px; max-height:88vh; overflow-y:auto;
-    background:var(--bg-panel); border:1px solid var(--border);
-    border-radius:28px 28px 0 0; padding:26px 22px calc(env(safe-area-inset-bottom) + 22px);
-    transform:translateY(30px); transition:transform .4s cubic-bezier(.2,.9,.3,1.1);
-  }
-  .overlay.show .card{ transform:translateY(0); }
-
-  .mascot-bubble{ display:flex; align-items:flex-start; gap:12px; margin-bottom:18px; }
-  .mascot-face{ width:52px; height:52px; border-radius:50%; background:var(--bg-elevated); border:2px solid var(--gold); display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0; }
-  .bubble{ background:var(--bg-elevated); border:1px solid var(--border-soft); border-radius:16px 16px 16px 4px; padding:12px 14px; font-size:13px; color:var(--gold-bright); font-weight:700; letter-spacing:.02em; }
-
-  .card-title{ font-size:23px; font-weight:800; line-height:1.32; margin-bottom:16px; }
-
-  .xp-pop{
-    display:inline-flex; align-items:center; gap:6px; background:rgba(111,217,168,0.15);
-    border:1px solid rgba(111,217,168,0.4); color:var(--mint-bright); font-family:var(--mono);
-    font-size:13px; font-weight:700; padding:6px 12px; border-radius:20px; margin-bottom:16px;
-  }
-
-  .action-box{
-    background:linear-gradient(135deg, rgba(217,165,63,0.16), rgba(255,143,102,0.08));
-    border:1px solid var(--border); border-radius:16px; padding:15px 16px; margin-bottom:14px;
-    display:flex; align-items:center; gap:13px;
-  }
-  .action-box-icon{ font-size:24px; flex-shrink:0; }
-  .action-box-text{ font-size:14px; color:var(--text); line-height:1.4; font-weight:600; }
-
-  .funfact{
-    background:rgba(111,179,217,0.08); border:1px solid rgba(111,179,217,0.25);
-    border-radius:14px; padding:12px 14px; margin-bottom:20px; font-size:13.5px; color:var(--text-dim); line-height:1.55;
-  }
-  .funfact-label{ font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--sky); margin-bottom:5px; }
-
-  .card-actions{ display:flex; gap:10px; }
-  .btn{ flex:1; padding:16px; border-radius:14px; border:none; font-size:15.5px; font-weight:800; cursor:pointer; font-family:var(--sans); }
-  .btn-primary{ background:var(--gold); color:#181405; }
-  .btn-primary:active{ background:var(--gold-bright); transform:scale(.98); }
-  .btn-ghost{ background:transparent; border:1px solid var(--border-soft); color:var(--text-dim); flex:0 0 52px; display:flex; align-items:center; justify-content:center; }
-  .btn-ghost svg{ width:18px; height:18px; }
-
-  /* ---------- Finish screen ---------- */
-  .finish{ display:flex; flex-direction:column; align-items:center; text-align:center; padding:26px 6px 6px; }
-  .finish-mascot{ font-size:56px; margin-bottom:6px; }
-  .finish-eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--mint-bright); margin-bottom:8px; }
-  .finish-title{ font-size:27px; font-weight:800; margin-bottom:6px; }
-  .finish-rank{ font-size:15px; color:var(--gold-bright); font-weight:700; margin-bottom:24px; }
-  .stats{ display:grid; grid-template-columns:1fr 1fr; gap:10px; width:100%; margin-bottom:22px; }
-  .stat{ background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:16px; padding:16px; }
-  .stat-val{ font-family:var(--mono); font-size:24px; font-weight:700; color:var(--gold-bright); }
-  .stat-label{ font-size:10.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.09em; margin-top:4px; }
-
-  /* ---------- Settings drawer ---------- */
-  .drawer{ position:fixed; inset:0; z-index:900; background:var(--bg); transform:translateX(100%); transition:transform .3s ease; display:flex; flex-direction:column; }
-  .drawer.open{ transform:translateX(0); }
-  .drawer-head{ display:flex; align-items:center; justify-content:space-between; padding:calc(env(safe-area-inset-top) + 16px) 18px 16px; border-bottom:1px solid var(--border-soft); flex-shrink:0; }
-  .drawer-title{ font-size:17px; font-weight:800; }
-  .drawer-body{ flex:1; overflow-y:auto; padding:18px; }
-  .section-label{ font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold-bright); margin:22px 0 10px; }
-  .section-label:first-child{ margin-top:0; }
-  .field{ margin-bottom:18px; }
-  .field label{ display:block; font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; }
-  .field select, .field textarea, .field input{ width:100%; background:var(--bg-panel); border:1px solid var(--border-soft); color:var(--text); border-radius:12px; padding:12px; font-family:var(--mono); font-size:13px; }
-  .field textarea{ min-height:200px; resize:vertical; line-height:1.5; }
-  .row{ display:flex; align-items:center; justify-content:space-between; padding:13px 0; border-bottom:1px solid var(--border-soft); }
-  .row-label{ font-size:14px; }
-  .row-sub{ font-size:11.5px; color:var(--text-dim); margin-top:2px; }
-  .switch{ width:46px; height:26px; border-radius:13px; background:var(--bg-elevated); border:1px solid var(--border-soft); position:relative; cursor:pointer; flex-shrink:0; }
-  .switch.on{ background:var(--mint); border-color:var(--mint); }
-  .switch::after{ content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:var(--text-dim); transition:transform .2s; }
-  .switch.on::after{ transform:translateX(20px); background:#0c1210; }
-  .sim-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
-  .chip{ background:var(--bg-panel); border:1px solid var(--border-soft); color:var(--text-dim); padding:9px 13px; border-radius:10px; font-size:12px; font-family:var(--mono); cursor:pointer; }
-  .chip:active{ background:var(--bg-elevated); }
-  .btn-block{ width:100%; padding:14px; border-radius:14px; background:var(--bg-panel); border:1px solid var(--border-soft); color:var(--text); font-size:14px; margin-top:8px; cursor:pointer; font-weight:600; }
-  .btn-block.accent{ background:linear-gradient(135deg, rgba(217,165,63,.25), rgba(111,217,168,.15)); border-color:var(--gold); color:var(--gold-bright); }
-  .btn-danger{ color:var(--danger); border-color:rgba(255,122,99,0.3); }
-  .status-line{ font-family:var(--mono); font-size:11px; color:var(--text-faint); padding:10px 0; line-height:1.6; }
-  .tile-progress-wrap{ height:8px; border-radius:5px; background:var(--bg-elevated); overflow:hidden; margin-top:10px; }
-  .tile-progress-fill{ height:100%; background:linear-gradient(90deg, var(--sky), var(--mint-bright)); width:0%; transition:width .2s; }
-
-  .rec-item{ background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:16px; padding:13px 15px; margin-top:10px; }
-  .rec-item-top{ display:flex; align-items:center; gap:9px; }
-  .rec-emoji{ font-size:20px; }
-  .rec-name{ font-weight:700; font-size:14px; flex:1; }
-  .rec-coords{ font-family:var(--mono); font-size:10.5px; color:var(--text-faint); margin-top:5px; }
-  .rec-actions{ display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; }
-  .rec-actions button{ background:var(--bg-elevated); border:1px solid var(--border-soft); color:var(--text-dim); border-radius:9px; padding:7px 11px; font-size:12.5px; cursor:pointer; font-family:var(--sans); }
-  .rec-actions button:active{ background:var(--bg-panel); }
-
-  .route-item{ background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:16px; padding:13px 15px; margin-top:10px; }
-  .route-item.active{ border-color:var(--mint); background:var(--bg-elevated); }
-  .route-item-top{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .route-item-name{ font-weight:800; font-size:14.5px; flex:1; }
-  .route-badge{ font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; background:rgba(111,217,168,0.18); color:var(--mint-bright); border:1px solid rgba(111,217,168,0.4); padding:3px 8px; border-radius:8px; }
-  .route-badge.editing{ background:rgba(217,165,63,0.18); color:var(--gold-bright); border-color:rgba(217,165,63,0.4); }
-  .route-item-meta{ font-family:var(--mono); font-size:10.5px; color:var(--text-faint); margin-top:5px; }
-
-  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--bg-elevated); border:1px solid var(--border); color:var(--text); padding:12px 20px; border-radius:14px; font-size:13px; z-index:950; opacity:0; pointer-events:none; transition:all .3s; font-weight:600; }
-  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
-
-  #confettiCanvas{ position:fixed; inset:0; z-index:1000; pointer-events:none; }
-
-  ::-webkit-scrollbar{ width:0; }
+  #emptyState h2{ color:var(--gold-bright); font-size:16px; margin:0; }
+  #emptyState p{ color:var(--text-dim); font-size:13px; margin:0; max-width:280px; }
 </style>
 </head>
 <body>
 <div id="app">
-
-  <div class="topbar">
-    <div class="brand">
-      <div class="mascot-avatar" id="mascotAvatar">🧑‍🚀</div>
-      <div class="brand-info">
-        <div class="rank-name" id="rankName">Kadett</div>
-        <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xpFill" style="width:0%"></div></div>
-      </div>
+  <header>
+    <div>
+      <div class="title" id="routeTitle">Lädt…</div>
+      <div class="sub" id="routeSub"></div>
+      <div class="sub" id="routeCountNote" style="margin-top:2px;"></div>
+      <select id="routeSelector" style="margin-top:6px; background:var(--bg-elevated); color:var(--text); border:1px solid var(--border); border-radius:6px; font-size:11px; padding:3px 6px;"></select>
+      <button id="roesrathTestBtn" style="margin-top:6px; display:block; background:var(--gold); color:#141311; border:none; border-radius:6px; font-size:11px; font-weight:800; padding:5px 10px; cursor:pointer;">🧪 Rösrath-Test anzeigen (unabhängig von Bibliothek)</button>
     </div>
-    <div class="gps-pill">
-      <div class="gps-dot" id="gpsDot"></div>
-      <div class="gps-label" id="gpsLabel">GPS</div>
-    </div>
-    <div class="icon-btn" id="settingsBtn" aria-label="Einstellungen">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-    </div>
-  </div>
-
-  <div class="map-wrap">
+    <div class="badge">MapLibre v0.6.0</div>
+  </header>
+  <div id="mapWrap">
     <div id="map"></div>
-    <div class="map-center-btn" id="locateBtn" style="bottom:56px;" title="Zu meinem echten Standort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="3"/></svg></div>
-    <div class="map-center-btn" id="centerBtn" title="Zur Route zoomen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6l7-3 8 3 7-3v15l-7 3-8-3-7 3z"/><path d="M8 3v15M16 6v15"/></svg></div>
-    <div id="tileWarning" class="tile-warning">📡 Kartenkacheln laden nicht — offline oder kein Empfang</div>
-    <button id="navExitBtn" class="nav-exit-btn" style="display:none;">✕ Navigation beenden</button>
-    <button id="navNorthBtn" class="nav-north-btn" style="display:none;">🧭 Karte Norden</button>
-    <button id="navRecenterBtn" class="nav-recenter-btn" style="display:none;">🎯 Zurück zur Navigation</button>
-  </div>
-
-  <div class="main" id="mainView"></div>
-
-</div>
-
-<canvas id="confettiCanvas"></canvas>
-
-<div class="overlay" id="overlay"><div class="card" id="triggerCard"></div></div>
-<div class="overlay" id="recordOverlay"><div class="card" id="recordCard"></div></div>
-
-<div class="drawer" id="drawer">
-  <div class="drawer-head">
-    <div class="drawer-title">Einstellungen <span style="font-family:var(--mono); font-size:11px; color:var(--text-faint); font-weight:400;" id="versionTag"></span></div>
-    <div class="icon-btn" id="closeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
-  </div>
-  <div class="drawer-body">
-
-    <div class="section-label">Meine Routen 🗂️</div>
-    <button class="btn-block accent" id="newRouteBtn">➕ Neue Route erstellen (laufen)</button>
-    <button class="btn-block accent" id="planRouteBtn">🗺️ Karte am Handy erstellen</button>
-    <div id="routeLibraryList"></div>
-
-    <div class="section-label">Offline-Karte</div>
-    <div class="row-sub" style="margin-bottom:8px;">Einmal mit WLAN/Empfang laden — danach funktioniert die Karte auch ohne Netz.</div>
-    <button class="btn-block accent" id="downloadTiles">Karte offline speichern</button>
-    <div class="tile-progress-wrap"><div class="tile-progress-fill" id="tileProgressFill"></div></div>
-    <div class="status-line" id="tileStatus">Noch keine Offline-Kacheln gespeichert.</div>
-    <button class="btn-block" id="clearTiles" style="margin-top:8px; background:none; border:1px solid var(--line); color:var(--muted);">Alle Kartenkacheln löschen</button>
-
-    <div class="section-label">Ansage &amp; Sound</div>
-    <div class="row">
-      <div><div class="row-label">Sprachansage</div><div class="row-sub">Automatisch vorlesen bei Wegpunkt</div></div>
-      <div class="switch" id="voiceSwitch"></div>
+    <button class="map-btn" id="northBtn" title="Karte Norden">🧭</button>
+    <button class="map-btn" id="centerBtn" title="Route zentrieren">🎯</button>
+    <button class="map-btn" id="locateBtn" title="Mein Standort">📍</button>
+    <div id="statusBar">Karte wird geladen…</div>
+    <div id="emptyState" style="display:none;">
+      <h2>Keine Route aktiv</h2>
+      <p>Öffne zuerst die normale ExoTrail-Navi-App und wähle oder erstelle eine Route — diese Testversion liest dieselben Daten aus dem Browser-Speicher.</p>
     </div>
-    <div class="row">
-      <div><div class="row-label">Sound-Effekte</div><div class="row-sub">Ding bei jeder Station</div></div>
-      <div class="switch" id="soundSwitch"></div>
-    </div>
-    <div class="field" style="margin-top:16px;">
-      <label>Stimme (Deutsch)</label>
-      <select id="voiceSelect"></select>
-    </div>
-
-    <div class="section-label">Route aufnehmen 📍</div>
-    <div class="row-sub" id="recordingStatus" style="margin-bottom:12px;">Wähle oben "Neue Route erstellen" oder bearbeite eine bestehende Route.</div>
-    <button class="btn-block accent" id="markHereBtn">📍 Hier markieren</button>
-    <div id="recordList"></div>
-    <div id="recordActionsWrap" style="display:none; flex-direction:column; gap:8px; margin-top:12px;">
-      <button class="btn-block" id="finishRecording">✅ Aufnahme als Route speichern</button>
-      <button class="btn-block btn-danger" id="clearRecording">Aufnahme verwerfen</button>
-    </div>
-
-    <div class="section-label">Route (JSON)</div>
-    <div class="field">
-      <label>Standard-Trigger-Radius (Meter)</label>
-      <input type="number" id="radiusInput" value="30" min="5" max="200">
-    </div>
-    <div class="field">
-      <label>Route (JSON) — hier deine echte Strecke eintragen</label>
-      <textarea id="routeJson" spellcheck="false"></textarea>
-    </div>
-    <button class="btn-block" id="applyRoute">Route übernehmen</button>
-
-    <div class="status-line" id="statusLine"></div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
+<script src="https://unpkg.com/@protomaps/basemaps@5/dist/basemaps.js" crossorigin="anonymous"></script>
 <script>
-(function(){
+// ---------------- Config ----------------
+const PMTILES_URL = 'https://ormpszktwwiahjooukjk.supabase.co/storage/v1/object/public/exotrail-maps/bergisches-land.pmtiles';
 
-  const APP_VERSION = "0.16.0";
+// ---------------- Route data (reads the SAME localStorage as the main app) ----------------
+function loadRouteLibrary(){
+  try{ return JSON.parse(localStorage.getItem('exotrail_routes_v1') || '{}'); }
+  catch(e){ return {}; }
+}
+function loadProgress(routeId){
+  try{ const p = localStorage.getItem('exotrail_progress_'+routeId); return p ? JSON.parse(p) : null; }
+  catch(e){ return null; }
+}
 
-  /* ============================================================
-     Interner Platzhalter — NUR damit die App nicht abstürzt, wenn
-     noch keine einzige eigene Route existiert. Erscheint NIE in
-     "Meine Routen", wird NIE gespeichert/aktiviert — render() zeigt
-     stattdessen einen "Noch keine Route"-Hinweis an.
-  ============================================================ */
-  const EMPTY_ROUTE_STUB = {
-    id: "__empty__",
-    name: "",
-    waypoints: [ { id:"__stub__", name:"", lat:50.9328, lng:7.2011, radius:30, type:"start", instruction:"", hypershellAction:"", funfact:"" } ]
+const routeLibrary = loadRouteLibrary();
+const activeId = localStorage.getItem('exotrail_active_route_id');
+const testOverrideId = localStorage.getItem('exotrail_maplibre_test_route_id');
+
+// Hardcoded Rösrath fallback route — completely independent of whatever is (or
+// isn't) in this browser's localStorage. Lets us verify the map/color fix
+// works in the right place regardless of which device/profile has the real data.
+const ROESRATH_TEST_ROUTE = {
+  id: '__roesrath_test__',
+  name: 'Rösrath Test (fest einprogrammiert)',
+  waypoints: [
+    { id:'w0', type:'start', name:'Start Rösrath', lat:50.8890, lng:7.2100 },
+    { id:'w1', type:'stop', name:'Wegpunkt 1', lat:50.8950, lng:7.2200 },
+    { id:'w2', type:'stop', name:'Wegpunkt 2', lat:50.9050, lng:7.2350 },
+    { id:'w3', type:'finish', name:'Ziel Rösrath', lat:50.9150, lng:7.2500 }
+  ]
+};
+if(testOverrideId === '__roesrath_test__') routeLibrary['__roesrath_test__'] = ROESRATH_TEST_ROUTE;
+
+const routeId = (testOverrideId && routeLibrary[testOverrideId]) ? testOverrideId
+  : (routeLibrary[activeId] ? activeId : Object.keys(routeLibrary)[0]);
+const route = routeLibrary[routeId] || null;
+
+// Populate the route selector so testing isn't tied to whichever route the
+// main app currently considers "active" — handy when you have both a
+// vacation-testing route and your real Rösrath route in the same library.
+const selectorEl = document.getElementById('routeSelector');
+const roesrathBtn = document.getElementById('roesrathTestBtn');
+document.getElementById('routeCountNote').textContent = Object.keys(routeLibrary).filter(k=>k!=='__roesrath_test__').length + ' Route(n) in dieser Browser-Bibliothek gefunden.';
+const libKeys = Object.keys(routeLibrary);
+if(libKeys.length > 1){
+  selectorEl.innerHTML = libKeys.map(id =>
+    `<option value="${id}" ${id===routeId?'selected':''}>${(routeLibrary[id].name||id)} (${routeLibrary[id].waypoints.length} WP)</option>`
+  ).join('');
+  selectorEl.onchange = () => {
+    localStorage.setItem('exotrail_maplibre_test_route_id', selectorEl.value);
+    location.reload();
   };
+} else {
+  selectorEl.style.display = 'none';
+}
+roesrathBtn.onclick = () => {
+  localStorage.setItem('exotrail_maplibre_test_route_id', '__roesrath_test__');
+  location.reload();
+};
+const progress = route ? (loadProgress(route.id) || { visited: [] }) : { visited: [] };
 
-  const TYPE_EMOJI = { start:"🚀", mode:"⚡", checkpoint:"📍", info:"💡", finish:"🏁" };
-  const TYPE_LABEL = { start:"Start", mode:"Modus-Wechsel", checkpoint:"Checkpoint", info:"Info", finish:"Ziel" };
-  const TYPE_XP    = { start:10, mode:25, checkpoint:15, info:10, finish:50 };
+// ---------------- Geo helpers (copied from the main app) ----------------
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000, toRad=d=>d*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function esc(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function getCurrentPositionAsync(){
+  return new Promise((resolve,reject) => {
+    if(!('geolocation' in navigator)) return reject(new Error('Kein GPS verfügbar'));
+    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+  });
+}
+function nextUnvisitedIndex(){ return route.waypoints.findIndex(w => !progress.visited.includes(w.id)); }
+function waypointLabel(index){
+  const w = route.waypoints[index];
+  if(w.type === 'start') return 'Start';
+  if(w.type === 'finish') return 'Ziel';
+  let counter = 0;
+  for(let j=0;j<=index;j++){
+    const t = route.waypoints[j].type;
+    if(t === 'start' || t === 'finish') continue;
+    counter++;
+  }
+  return String(counter).padStart(2,'0');
+}
+function routeLineCoords(r){
+  // GeoJSON wants [lng,lat], the app's stored data is {lat,lng} — swap here.
+  const pts = (r.track && r.track.length > 1) ? r.track : r.waypoints.map(w => [w.lat, w.lng]);
+  return pts.map(p => [p[1], p[0]]);
+}
 
-  const RANKS = [
-    { min:0,   name:"Bodenpersonal",        emoji:"👨‍🚀" },
-    { min:20,  name:"Kadett",                emoji:"🌱" },
-    { min:60,  name:"Rover-Pilot",           emoji:"🛰️" },
-    { min:120, name:"Mondläufer",            emoji:"🌙" },
-    { min:200, name:"Mars-Anwärter",         emoji:"🔴" },
-    { min:300, name:"Marsianer",             emoji:"👽" },
-    { min:450, name:"Kommandant der Mission",emoji:"⭐" }
-  ];
+// ---------------- Empty-route guard ----------------
+if(!route){
+  document.getElementById('emptyState').style.display = 'flex';
+  document.getElementById('statusBar').style.display = 'none';
+  document.getElementById('routeTitle').textContent = 'Keine Route';
+  throw new Error('no route');
+}
+document.getElementById('routeTitle').textContent = route.name || 'Route';
+const wpCoordSummary = route.waypoints.map(w => w.lat.toFixed(2)+','+w.lng.toFixed(2)).join(' · ');
+document.getElementById('routeSub').textContent = route.waypoints.length + ' Wegpunkte · ' + wpCoordSummary;
 
-  const MASCOT_LINES = {
-    start:"Mission Briefing: ",
-    mode:"Neue Order von der Basis: ",
-    checkpoint:"Zwischenstopp erreicht. ",
-    info:"Kurzer Funkspruch: ",
-    finish:"Mission erfüllt. "
+// ---------------- PMTiles + MapLibre setup ----------------
+// Standard, minimal integration pattern (confirmed working via isolated test) —
+// no manually-created separate PMTiles instance, that was likely conflicting
+// with MapLibre's own internal instance for the same URL.
+const protocol = new pmtiles.Protocol();
+maplibregl.addProtocol('pmtiles', protocol.tile);
+
+setTimeout(() => {
+  if(document.getElementById('statusBar').textContent.includes('warte auf Kartendaten')){
+    document.getElementById('statusBar').innerHTML =
+      '⚠️ Lädt noch (länger als erwartet) — Datei/Server sind bestätigt in Ordnung, kann an einer langsameren Verbindung liegen.';
+  }
+}, 25000);
+
+let generatedLayers;
+try{
+  generatedLayers = basemaps.layers('protomaps', basemaps.namedFlavor('dark'), { lang:'de' });
+  generatedLayers = boostMapContrast(generatedLayers);
+}catch(e){
+  console.error('basemaps.layers() failed:', e);
+  generatedLayers = [{ id:'bg-fallback', type:'background', paint:{ 'background-color':'#0c1210' } }];
+}
+
+// The default 'dark' flavor renders roads/labels too low-contrast and gives
+// buildings/water/land almost the same near-black tone. Precise fix using the
+// real Protomaps source-layer names (water, buildings, landuse, earth, natural,
+// roads) for a proper "friendly night mode" palette with clear visual hierarchy.
+const FILL_COLORS = {
+  earth: '#121813',      // base land — close to the app's own dark background
+  water: '#0f2733',      // distinctly blue-dark, reads clearly as water
+  landuse: '#182a1e',    // parks/forests — subtle green tint
+  natural: '#182a1e',
+  buildings: '#3a453d'   // noticeably LIGHTER than land — buildings read as shapes, not holes
+};
+function boostMapContrast(layers){
+  return layers.map(l => {
+    const layer = JSON.parse(JSON.stringify(l));
+    const sl = layer['source-layer'];
+    if(layer.type === 'symbol'){
+      layer.paint = layer.paint || {};
+      layer.paint['text-color'] = '#f1efe4';
+      layer.paint['text-halo-color'] = '#05080a';
+      layer.paint['text-halo-width'] = 1.6;
+    }
+    if(layer.type === 'fill' && FILL_COLORS[sl]){
+      layer.paint = layer.paint || {};
+      layer.paint['fill-color'] = FILL_COLORS[sl];
+    }
+    if(layer.type === 'line'){
+      layer.paint = layer.paint || {};
+      if(sl === 'roads') layer.paint['line-color'] = '#9aa89f';
+      else if(sl === 'water' || sl === 'natural') layer.paint['line-color'] = '#2a5568'; // rivers/streams
+      else if(sl === 'buildings') layer.paint['line-color'] = '#4a564d';
+    }
+    return layer;
+  });
+}
+
+const style = {
+  version: 8,
+  glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
+  sprite: 'https://protomaps.github.io/basemaps-assets/sprites/v4/dark',
+  sources: {
+    protomaps: {
+      type: 'vector',
+      url: 'pmtiles://' + PMTILES_URL,
+      attribution: '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org">OpenStreetMap</a> Mitwirkende'
+    }
+  },
+  layers: generatedLayers
+};
+
+const startWp = route.waypoints.find(w => w.type === 'start') || route.waypoints[0];
+const map = new maplibregl.Map({
+  container: 'map',
+  style,
+  center: [startWp.lng, startWp.lat],
+  zoom: 14,
+  pitch: 0,
+  attributionControl: { compact: true }
+  // touchZoomRotate + dragRotate are ON by default — combined pinch-zoom +
+  // two-finger-rotate, native, no custom gesture code needed at all.
+});
+
+let meMarker = null;
+let wpMarkers = [];
+
+map.on('load', () => {
+  document.getElementById('statusBar').textContent = 'Stil geladen · warte auf Kartendaten…';
+
+  // Route casing (white outline) + route line (red), as two GeoJSON line layers.
+  const routeGeojson = {
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: routeLineCoords(route) }
   };
-
-  /* ---------------- State ---------------- */
-  let routeLibrary = loadRouteLibrary();
-  let route = routeLibrary[localStorage.getItem('exotrail_active_route_id')] || routeLibrary[Object.keys(routeLibrary)[0]] || EMPTY_ROUTE_STUB;
-  let progress = loadProgress(route.id) || { visited: [], startedAt: null, xp: 0 };
-  let voiceOn = localStorage.getItem('exotrail_voiceon') !== '0';
-  let soundOn = localStorage.getItem('exotrail_soundon') !== '0';
-  let defaultRadius = parseInt(localStorage.getItem('exotrail_radius') || '30');
-  let watchId = null;
-  let voices = [];
-  let selectedVoiceURI = localStorage.getItem('exotrail_voice') || '';
-  let wakeLock = null;
-  let map, routeLine, routeLineCasing, recordTrackLine, meMarker, wpMarkers = [];
-  let recState = loadRecordingState();
-  let recording = recState.waypoints;
-  let recordingRouteId = recState.routeId;
-  let recordingRouteName = recState.routeName;
-  let recordingTrack = recState.track || [];
-  let planningMode = recState.planning || false;
-  let recordingSegLens = recState.segLens || [];
-  let recordingMarkers = [];
-  let editingRecordIndex = null;
-  let trackWatchId = null;
-  let navModeActive = false;
-  let autoFollow = true;
-  let programmaticMove = false;
-
-  const els = {
-    main: document.getElementById('mainView'),
-    gpsDot: document.getElementById('gpsDot'),
-    gpsLabel: document.getElementById('gpsLabel'),
-    overlay: document.getElementById('overlay'),
-    card: document.getElementById('triggerCard'),
-    drawer: document.getElementById('drawer'),
-    toast: document.getElementById('toast'),
-    rankName: document.getElementById('rankName'),
-    xpFill: document.getElementById('xpFill'),
-    mascotAvatar: document.getElementById('mascotAvatar'),
-  };
-
-  /* ---------------- Persistence ---------------- */
-  function loadRouteLibrary(){
-    try{
-      let lib = JSON.parse(localStorage.getItem('exotrail_routes_v1') || 'null');
-      if(!lib){
-        lib = {};
-        const old = localStorage.getItem('exotrail_route'); // Migration aus v0.6
-        if(old){ try{ const r = JSON.parse(old); if(r.id !== 'demo-hoffnungsthal') lib[r.id] = { ...r, updatedAt: Date.now() }; }catch(e){} }
-        localStorage.setItem('exotrail_routes_v1', JSON.stringify(lib));
-      }
-      // Aufräumen: alte Hoffnungsthal-Demo aus früheren Versionen restlos entfernen, falls noch gespeichert
-      if(lib['demo-hoffnungsthal']){
-        delete lib['demo-hoffnungsthal'];
-        localStorage.setItem('exotrail_routes_v1', JSON.stringify(lib));
-        if(localStorage.getItem('exotrail_active_route_id') === 'demo-hoffnungsthal') localStorage.removeItem('exotrail_active_route_id');
-      }
-      return lib;
-    }catch(e){ return {}; }
-  }
-  function saveRouteLibrary(){ localStorage.setItem('exotrail_routes_v1', JSON.stringify(routeLibrary)); }
-  function loadProgress(routeId){ try{ const p = localStorage.getItem('exotrail_progress_'+routeId); return p ? JSON.parse(p) : null; }catch(e){ return null; } }
-  function saveProgress(){ localStorage.setItem('exotrail_progress_'+route.id, JSON.stringify(progress)); }
-  function loadRecordingState(){
-    try{
-      const raw = localStorage.getItem('exotrail_recording_draft');
-      if(!raw) return { routeId:null, routeName:'', waypoints:[], track:[], planning:false, segLens:[] };
-      const parsed = JSON.parse(raw);
-      if(Array.isArray(parsed)) return { routeId:null, routeName:'', waypoints:parsed, track:[], planning:false, segLens:[] }; // altes Format
-      if(!parsed.track) parsed.track = [];
-      if(!parsed.segLens) parsed.segLens = [];
-      if(typeof parsed.planning !== 'boolean') parsed.planning = false;
-      return parsed;
-    }catch(e){ return { routeId:null, routeName:'', waypoints:[], track:[], planning:false, segLens:[] }; }
-  }
-  function saveRecordingState(){ localStorage.setItem('exotrail_recording_draft', JSON.stringify({ routeId:recordingRouteId, routeName:recordingRouteName, waypoints:recording, track:recordingTrack, planning:planningMode, segLens:recordingSegLens })); }
-
-  function activateRoute(id){
-    const r = routeLibrary[id];
-    if(!r) return;
-    route = r;
-    localStorage.setItem('exotrail_active_route_id', id);
-    progress = loadProgress(id) || { visited: [], startedAt: null, xp: 0 };
-    saveProgress();
-    if(map){ routeLine.setLatLngs(routeLineCoords(route)); routeLineCasing.setLatLngs(routeLineCoords(route)); recordTrackLine.setLatLngs([]); renderWpMarkers(); fitRoute(); }
-    render();
-    buildRouteLibraryUI();
-  }
-
-  function editRouteInRecorder(id){
-    const r = routeLibrary[id];
-    if(!r) return;
-    if(recording.length > 0 && recordingRouteId !== id){
-      if(!confirm('Es gibt noch eine offene Aufnahme ("'+(recordingRouteName||'unbenannt')+'", '+recording.length+' Punkte). Verwerfen und stattdessen "'+r.name+'" bearbeiten?')) return;
-    }
-    detachPlanningClick();
-    planningMode = false;
-    recordingSegLens = [];
-    recording = r.waypoints.map(w => ({...w}));
-    recordingTrack = (r.track || []).map(p => [p[0], p[1]]);
-    recordingRouteId = r.id;
-    recordingRouteName = r.name;
-    saveRecordingState();
-    buildRecordList();
-    buildRouteLibraryUI();
-    startTrackRecording();
-    drawerEl.classList.remove('open');
-    toast('Bearbeite "'+r.name+'" · '+recording.length+' Punkte, '+recordingTrack.length+' Spurpunkte geladen — Aufzeichnung läuft');
-  }
-
-  function deleteRouteFromLibrary(id){
-    const r = routeLibrary[id];
-    if(!r) return;
-    if(!confirm('Route "'+r.name+'" wirklich löschen? Das kann nicht rückgängig gemacht werden.')) return;
-    delete routeLibrary[id];
-    saveRouteLibrary();
-    localStorage.removeItem('exotrail_progress_'+id);
-    if(route.id === id){
-      const remaining = Object.keys(routeLibrary);
-      if(remaining.length === 0){
-        route = EMPTY_ROUTE_STUB;
-        localStorage.removeItem('exotrail_active_route_id');
-        if(map){ routeLine.setLatLngs([]); routeLineCasing.setLatLngs([]); renderWpMarkers(); }
-        render();
-      } else {
-        activateRoute(remaining[0]);
-      }
-    }
-    if(recordingRouteId === id){ recording=[]; recordingRouteId=null; recordingRouteName=''; saveRecordingState(); buildRecordList(); }
-    buildRouteLibraryUI();
-    toast('Route gelöscht');
-  }
-
-  function buildRouteLibraryUI(){
-    const wrap = document.getElementById('routeLibraryList');
-    if(!wrap) return;
-    const ids = Object.keys(routeLibrary).sort((a,b) => (routeLibrary[b].updatedAt||0) - (routeLibrary[a].updatedAt||0));
-    wrap.innerHTML = ids.map(id => {
-      const r = routeLibrary[id];
-      const isActive = route && route.id === id;
-      const isEditing = recordingRouteId === id;
-      return `
-        <div class="route-item ${isActive?'active':''}">
-          <div class="route-item-top">
-            <span class="route-item-name">${esc(r.name)}</span>
-            ${isActive?'<span class="route-badge">AKTIV</span>':''}
-            ${isEditing?'<span class="route-badge editing">IN ARBEIT</span>':''}
-          </div>
-          <div class="route-item-meta">${(r.waypoints||[]).length} Punkte${r.updatedAt ? ' · zuletzt ' + new Date(r.updatedAt).toLocaleDateString('de-DE') : ''}</div>
-          <div class="rec-actions">
-            <button data-act="activate" data-id="${id}">▶️ Aktivieren</button>
-            <button data-act="edit" data-id="${id}">✏️ Bearbeiten</button>
-            <button data-act="delete" data-id="${id}">🗑️</button>
-          </div>
-        </div>`;
-    }).join('');
-    wrap.querySelectorAll('[data-act]').forEach(btn => {
-      const id = btn.dataset.id;
-      if(btn.dataset.act === 'activate') btn.onclick = () => { activateRoute(id); toast('"'+routeLibrary[id].name+'" ist jetzt aktiv'); };
-      if(btn.dataset.act === 'edit') btn.onclick = () => editRouteInRecorder(id);
-      if(btn.dataset.act === 'delete') btn.onclick = () => deleteRouteFromLibrary(id);
-    });
-  }
-  function toast(msg){ els.toast.textContent = msg; els.toast.classList.add('show'); setTimeout(()=> els.toast.classList.remove('show'), 2200); }
-
-  /* ---------------- Geo helpers ---------------- */
-  function haversine(lat1,lon1,lat2,lon2){
-    const R=6371000, toRad=d=>d*Math.PI/180;
-    const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
-    const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
-    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-  }
-  function fmtDist(m){ if(m < 1000) return { val: Math.round(m), unit:'m' }; return { val: (m/1000).toFixed(1), unit:'km' }; }
-
-  /* ---------------- Rank / XP ---------------- */
-  function rankFor(xp){
-    let r = RANKS[0];
-    for(const cand of RANKS){ if(xp >= cand.min) r = cand; }
-    return r;
-  }
-  function rankProgress(xp){
-    const idx = RANKS.findIndex(r => r === rankFor(xp));
-    const cur = RANKS[idx], next = RANKS[idx+1];
-    if(!next) return 100;
-    return Math.min(100, Math.round(((xp - cur.min) / (next.min - cur.min)) * 100));
-  }
-  function updateHUD(){
-    const r = rankFor(progress.xp);
-    els.rankName.textContent = r.name;
-    els.mascotAvatar.textContent = r.emoji;
-    els.xpFill.style.width = rankProgress(progress.xp) + '%';
-  }
-
-  /* ---------------- Offline tile cache (IndexedDB) ---------------- */
-  const TILE_DB = 'exotrail_tiles_db';
-  let tileDb = null;
-  function openTileDb(){
-    return new Promise((resolve,reject) => {
-      const req = indexedDB.open(TILE_DB, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore('tiles');
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-  function getTile(key){
-    return new Promise(resolve => {
-      if(!tileDb) return resolve(null);
-      const tx = tileDb.transaction('tiles','readonly');
-      const req = tx.objectStore('tiles').get(key);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
-    });
-  }
-  function putTile(key, blob){
-    return new Promise(resolve => {
-      if(!tileDb) return resolve();
-      const tx = tileDb.transaction('tiles','readwrite');
-      tx.objectStore('tiles').put(blob, key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve();
-    });
-  }
-  function countTiles(){
-    return new Promise(resolve => {
-      if(!tileDb) return resolve(0);
-      const tx = tileDb.transaction('tiles','readonly');
-      const req = tx.objectStore('tiles').count();
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(0);
-    });
-  }
-
-  let tileFailStreak = 0;
-  const OfflineTileLayer = L.TileLayer.extend({
-    createTile: function(coords, done){
-      const tile = document.createElement('img');
-      tile.alt = '';
-      const key = coords.z + '/' + coords.x + '/' + coords.y;
-      getTile(key).then(blob => {
-        if(blob){
-          tile.src = URL.createObjectURL(blob);
-          tileFailStreak = 0;
-          hideTileWarning();
-          done(null, tile);
-        } else {
-          const url = this.getTileUrl(coords);
-          fetch(url).then(r => { if(!r.ok) throw new Error('tile fetch failed'); return r.blob(); })
-            .then(blob2 => { putTile(key, blob2); tile.src = URL.createObjectURL(blob2); tileFailStreak = 0; hideTileWarning(); done(null, tile); })
-            .catch(err => { tileFailStreak++; if(tileFailStreak > 4) showTileWarning(); done(err, tile); });
-        }
-      });
-      return tile;
-    }
+  map.addSource('route', { type: 'geojson', data: routeGeojson });
+  map.addLayer({
+    id: 'route-casing', type: 'line', source: 'route',
+    layout: { 'line-cap':'round', 'line-join':'round' },
+    paint: { 'line-color':'#ffffff', 'line-width':9, 'line-opacity':0.35 }
+  });
+  map.addLayer({
+    id: 'route-line', type: 'line', source: 'route',
+    layout: { 'line-cap':'round', 'line-join':'round' },
+    paint: { 'line-color':'#ff1a1a', 'line-width':5, 'line-opacity':0.95 }
   });
 
-  function showTileWarning(){
-    const el = document.getElementById('tileWarning');
-    if(el) el.style.display = 'flex';
+  renderWpMarkers();
+  fitRoute();
+});
+
+// On-screen diagnostics — lightweight update on 'sourcedata' (fires very often),
+// the expensive queryRenderedFeatures() call only on 'idle' (fires rarely) —
+// doing that heavy query on every sourcedata event can thrash the main thread
+// into apparent unresponsiveness, which is likely what looked like a hang.
+let tileLoadCount = 0, tileErrorCount = 0;
+map.on('sourcedata', (e) => {
+  if(e.sourceId === 'protomaps' && e.isSourceLoaded){
+    tileLoadCount++;
+    document.getElementById('statusBar').innerHTML =
+      '<b>Kartendaten laden</b> · Update ' + tileLoadCount +
+      (tileErrorCount ? ' · ⚠️ ' + tileErrorCount + ' Fehler' : '');
   }
-  function hideTileWarning(){
-    const el = document.getElementById('tileWarning');
-    if(el) el.style.display = 'none';
-  }
-
-  function tileRange(bounds, z){
-    const p1 = L.CRS.EPSG3857.latLngToPoint(bounds.getNorthWest(), z).divideBy(256).floor();
-    const p2 = L.CRS.EPSG3857.latLngToPoint(bounds.getSouthEast(), z).divideBy(256).floor();
-    return { xmin:p1.x, xmax:p2.x, ymin:p1.y, ymax:p2.y };
-  }
-
-  async function downloadOfflineTiles(){
-    const btn = document.getElementById('downloadTiles');
-    const fill = document.getElementById('tileProgressFill');
-    const status = document.getElementById('tileStatus');
-    btn.textContent = 'Lade Kacheln…';
-    btn.disabled = true;
-
-    const latlngs = route.waypoints.map(w => L.latLng(w.lat, w.lng));
-    const bounds = L.latLngBounds(latlngs).pad(0.25);
-    const zooms = [14,15,16,17];
-    let jobs = [];
-    zooms.forEach(z => {
-      const r = tileRange(bounds, z);
-      for(let x=r.xmin; x<=r.xmax; x++) for(let y=r.ymin; y<=r.ymax; y++) jobs.push({z,x,y});
-    });
-
-    let done = 0, failed = 0;
-    const concurrency = 4;
-    let idx = 0;
-    async function worker(){
-      while(idx < jobs.length){
-        const job = jobs[idx++];
-        const key = job.z+'/'+job.x+'/'+job.y;
-        const existing = await getTile(key);
-        if(!existing){
-          try{
-            const url = 'https://tile.openstreetmap.org/'+job.z+'/'+job.x+'/'+job.y+'.png';
-            const r = await fetch(url);
-            if(r.ok){ const blob = await r.blob(); await putTile(key, blob); } else failed++;
-          }catch(e){ failed++; }
-        }
-        done++;
-        fill.style.width = Math.round((done/jobs.length)*100) + '%';
-        status.textContent = done + ' / ' + jobs.length + ' Kacheln geladen' + (failed? ' ('+failed+' fehlgeschlagen)':'');
-      }
-    }
-    await Promise.all(Array.from({length:concurrency}, worker));
-
-    btn.textContent = 'Karte offline speichern';
-    btn.disabled = false;
-    localStorage.setItem('exotrail_tiles_done_'+route.id, '1');
-    toast('Karte ist jetzt offline verfügbar 🗺️');
-    const total = await countTiles();
-    status.textContent = '✅ Bereit für Offline-Nutzung · ' + total + ' Kacheln gespeichert';
-  }
-
-  async function clearAllTiles(){
-    if(!confirm('Wirklich alle gespeicherten Kartenkacheln löschen? Danach werden sie bei Bedarf neu geladen.')) return;
-    const btn = document.getElementById('clearTiles');
-    btn.textContent = 'Lösche…';
-    btn.disabled = true;
-    await new Promise(resolve => {
-      if(!tileDb){ resolve(); return; }
-      const tx = tileDb.transaction('tiles','readwrite');
-      tx.objectStore('tiles').clear();
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve();
-    });
-    // Also clear the "already downloaded for this route" flags so the offline button offers a fresh download.
-    Object.keys(localStorage).filter(k => k.startsWith('exotrail_tiles_done_')).forEach(k => localStorage.removeItem(k));
-    document.getElementById('tileStatus').textContent = 'Noch keine Offline-Kacheln gespeichert.';
-    document.getElementById('tileProgressFill').style.width = '0%';
-    btn.textContent = 'Alle Kartenkacheln löschen';
-    btn.disabled = false;
-    toast('Kartenkacheln gelöscht 🗑️');
-  }
-
-  /* ---------------- Map setup ---------------- */
-  function routeLineCoords(r){
-    return (r.track && r.track.length > 1) ? r.track : r.waypoints.map(w => [w.lat, w.lng]);
-  }
-
-  function initMap(){
-    map = L.map('map', { zoomControl:false, attributionControl:true, maxZoom:21, zoomSnap:0.25, zoomDelta:1 }).setView([route.waypoints[0].lat, route.waypoints[0].lng], 15);
-    new OfflineTileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 21, maxNativeZoom: 19, attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    routeLineCasing = L.polyline(routeLineCoords(route), {
-      color:'#ffffff', weight:9, opacity:0.35, lineCap:'round', lineJoin:'round'
-    }).addTo(map);
-    routeLine = L.polyline(routeLineCoords(route), {
-      color:'#ff1a1a', weight:5, opacity:0.95, lineCap:'round', lineJoin:'round'
-    }).addTo(map);
-
-    recordTrackLine = L.polyline(recordingTrack, { color:'#6fd9a8', weight:5, opacity:0.85, lineCap:'round', lineJoin:'round' }).addTo(map);
-
-    renderWpMarkers();
-    fitRoute();
-
-    if(recordingRouteId){
-      renderPlanningMarkers();
-      if(planningMode) attachPlanningClick();
-    }
-
-    document.getElementById('centerBtn').onclick = fitRoute;
-    document.getElementById('locateBtn').onclick = locateMe;
-    document.getElementById('navExitBtn').onclick = exitNavMode;
-    document.getElementById('navNorthBtn').onclick = resetMapNorth;
-    document.getElementById('navRecenterBtn').onclick = recenterNav;
-
-    map.on('dragstart zoomstart', () => {
-      if(navModeActive && !programmaticMove){ autoFollow = false; updateNavRecenterVisibility(); }
-    });
-  }
-
-  async function locateMe(){
-    const btn = document.getElementById('locateBtn');
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '⏳';
-    try{
-      const pos = await getCurrentPositionAsync();
-      const lat = pos.coords.latitude, lng = pos.coords.longitude;
-      window.__lastPos = { lat, lng };
-      updateMeMarker(lat, lng);
-      map.setView([lat, lng], 16);
-      const d = Math.round(haversine(lat, lng, route.waypoints[0].lat, route.waypoints[0].lng)/1000);
-      toast('Du bist hier · ' + d + ' km von der Route entfernt');
-    }catch(e){
-      toast('Standort nicht verfügbar: ' + e.message);
-    }
-    btn.innerHTML = originalHtml;
-  }
-
-  function fitRoute(){
-    if(!map || route.id === '__empty__') return;
-    map.fitBounds(routeLine.getBounds().pad(0.15));
-  }
-
-  function waypointLabel(index){
-    const w = route.waypoints[index];
-    if(w.type === 'start') return 'Start';
-    if(w.type === 'finish') return 'Ziel';
-    let counter = 0;
-    for(let j=0;j<=index;j++){
-      const t = route.waypoints[j].type;
-      if(t === 'start' || t === 'finish') continue;
-      counter++;
-    }
-    return String(counter).padStart(2,'0');
-  }
-
-  function renderWpMarkers(){
-    wpMarkers.forEach(m => map.removeLayer(m));
-    wpMarkers = [];
-    if(route.id === '__empty__') return;
-    const nIdx = nextUnvisitedIndex();
-    route.waypoints.forEach((w,i) => {
-      const current = i === nIdx;
-      const label = waypointLabel(i);
-      const icon = L.divIcon({
-        className:'', html:
-          '<div style="position:relative;">' +
-            (current ? '<div class="wp-pin-ring"></div>' : '') +
-            '<div class="wp-pin ' + (current ? 'current' : 'dim') + '">' + label + '</div>' +
-          '</div>',
-        iconSize: current ? [44,44] : [24,24],
-        iconAnchor: current ? [22,22] : [12,12]
-      });
-      const marker = L.marker([w.lat, w.lng], { icon }).addTo(map);
-      if(current){
-        marker.bindTooltip('<div class="wp-tooltip-box">'+esc(w.name)+'</div>', { permanent:true, direction:'top', offset:[0,-26], className:'wp-tooltip' });
-      }
-      marker.bindPopup('<b>'+esc(w.name)+'</b> · ' + label);
-      wpMarkers.push(marker);
-    });
-  }
-
-  /* ---------------- Karte manuell mit zwei Fingern drehen ---------------- */
-  let displayHeading = 0;   // aktuell eingestellte Kartendrehung (0 = Norden oben)
-  let gestureActive = false;
-  let gestureStartAngle = 0;
-  let gestureStartHeading = 0;
-  let gestureStartDist = 0;
-  let gestureStartZoom = 0;
-
-  function applyMapRotation(heading){
-    const mapEl = document.getElementById('map');
-    if(!mapEl) return;
-    mapEl.style.transform = 'translate(-50%,-50%) rotate(' + (-heading) + 'deg)';
-    document.documentElement.style.setProperty('--map-counter-rotate', heading + 'deg');
-  }
-
-  function touchAngleDeg(touches){
-    const dx = touches[1].clientX - touches[0].clientX;
-    const dy = touches[1].clientY - touches[0].clientY;
-    return Math.atan2(dy, dx) * 180 / Math.PI;
-  }
-  function touchDist(touches){
-    const dx = touches[1].clientX - touches[0].clientX;
-    const dy = touches[1].clientY - touches[0].clientY;
-    return Math.sqrt(dx*dx + dy*dy);
-  }
-  function onRotateTouchStart(e){
-    if(e.touches.length === 2){
-      gestureActive = true;
-      gestureStartAngle = touchAngleDeg(e.touches);
-      gestureStartHeading = displayHeading;
-      gestureStartDist = touchDist(e.touches);
-      gestureStartZoom = map ? map.getZoom() : 0;
-      if(map) map.dragging.disable();
-      const mapEl = document.getElementById('map');
-      if(mapEl) mapEl.style.transition = 'none';
-    }
-  }
-  function onRotateTouchMove(e){
-    if(gestureActive && e.touches.length === 2){
-      e.preventDefault();
-      const delta = touchAngleDeg(e.touches) - gestureStartAngle;
-      displayHeading = ((gestureStartHeading - delta) % 360 + 360) % 360;
-      applyMapRotation(displayHeading);
-
-      // Pinch-to-zoom, combined into the same two-finger gesture (Leaflet's own
-      // touchZoom is disabled during nav mode to avoid both handlers fighting
-      // over the same touch events, so zoom has to happen here instead).
-      if(map){
-        const dist = touchDist(e.touches);
-        if(gestureStartDist > 0){
-          const zoomDelta = Math.log2(dist / gestureStartDist);
-          const targetZoom = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), gestureStartZoom + zoomDelta));
-          map.setZoom(targetZoom, { animate:false });
-        }
-      }
-    }
-  }
-  function onRotateTouchEnd(e){
-    if(e.touches.length < 2){
-      gestureActive = false;
-      if(map) map.dragging.enable();
-      const mapEl = document.getElementById('map');
-      if(mapEl) mapEl.style.transition = '';
-    }
-  }
-  function attachRotateGesture(){
-    const el = document.getElementById('map');
-    if(!el) return;
-    el.addEventListener('touchstart', onRotateTouchStart, { passive:false });
-    el.addEventListener('touchmove', onRotateTouchMove, { passive:false });
-    el.addEventListener('touchend', onRotateTouchEnd);
-    el.addEventListener('touchcancel', onRotateTouchEnd);
-  }
-  function detachRotateGesture(){
-    const el = document.getElementById('map');
-    if(!el) return;
-    el.removeEventListener('touchstart', onRotateTouchStart);
-    el.removeEventListener('touchmove', onRotateTouchMove);
-    el.removeEventListener('touchend', onRotateTouchEnd);
-    el.removeEventListener('touchcancel', onRotateTouchEnd);
-    gestureActive = false;
-    if(map) map.dragging.enable();
-  }
-
-  function enterNavMode(){
-    navModeActive = true;
-    autoFollow = true;
-    document.querySelector('.map-wrap').classList.add('nav-mode');
-    document.getElementById('navExitBtn').style.display = 'flex';
-    document.getElementById('navNorthBtn').style.display = 'flex';
-    const pos = window.__lastPos;
-    programmaticMove = true;
-    if(pos) map.setView([pos.lat, pos.lng], 17); else fitRoute();
-    setTimeout(() => { programmaticMove = false; map.invalidateSize(); }, 350);
-    updateNavRecenterVisibility();
-    if(map.touchZoom) map.touchZoom.disable();
-    attachRotateGesture();
-    render();
-  }
-  function exitNavMode(){
-    navModeActive = false;
-    detachRotateGesture();
-    if(map && map.touchZoom) map.touchZoom.enable();
-    displayHeading = 0;
-    applyMapRotation(0);
-    document.querySelector('.map-wrap').classList.remove('nav-mode');
-    document.getElementById('navExitBtn').style.display = 'none';
-    document.getElementById('navNorthBtn').style.display = 'none';
-    document.getElementById('navRecenterBtn').style.display = 'none';
-    setTimeout(() => { if(map) map.invalidateSize(); }, 350);
-    render();
-  }
-  function updateNavRecenterVisibility(){
-    const btn = document.getElementById('navRecenterBtn');
-    if(!btn) return;
-    btn.style.display = (navModeActive && !autoFollow) ? 'flex' : 'none';
-  }
-  function recenterNav(){
-    autoFollow = true;
-    updateNavRecenterVisibility();
-    if(window.__lastPos){
-      programmaticMove = true;
-      map.setView([window.__lastPos.lat, window.__lastPos.lng], Math.max(map.getZoom(), 17));
-      setTimeout(() => programmaticMove = false, 350);
-    }
-  }
-  function resetMapNorth(){
-    displayHeading = 0;
-    applyMapRotation(0);
-  }
-
-
-  function updateMeMarker(lat,lng){
-    if(!map) return;
-    if(!meMarker){
-      const icon = L.divIcon({ className:'', html:'<div style="position:relative;"><div class="me-dot"></div><div class="me-arrow"></div></div>', iconSize:[16,16], iconAnchor:[8,8] });
-      meMarker = L.marker([lat,lng], { icon, zIndexOffset:1000 }).addTo(map);
-    } else {
-      meMarker.setLatLng([lat,lng]);
-    }
-  }
-
-  /* ---------------- Rendering (below-map panel) ---------------- */
-  function nextUnvisitedIndex(){ return route.waypoints.findIndex(w => !progress.visited.includes(w.id)); }
-
-  function render(){
-    if(recordingRouteId){ renderRecordingView(); return; }
-    if(route.id === '__empty__'){ renderEmptyState(); return; }
-    updateHUD();
-    const nIdx = nextUnvisitedIndex();
-    if(nIdx === -1){ renderFinish(); renderWpMarkers(); if(navModeActive) exitNavMode(); return; }
-
-    const target = route.waypoints[nIdx];
-    let html = `<div class="quest-card">
-      <div class="quest-eyebrow">🎯 Nächste Mission</div>
-      <div class="quest-dist" id="distReadout">–<span>m</span></div>
-      <div class="quest-name">weiter zu <b>${waypointLabel(nIdx) === 'Start' ? 'Start' : 'Punkt ' + waypointLabel(nIdx)}</b></div>
-      <button class="btn btn-primary" id="navStartBtn" style="width:100%; margin-top:14px;">${navModeActive ? '🧭 Navigation läuft' : '🧭 Navigation starten'}</button>
-      ${progress.visited.length > 0 ? `<button class="fallback-btn" id="cancelRouteBtn" style="margin-top:10px; color:var(--danger); border-color:rgba(255,122,99,0.3);">🛑 Route abbrechen</button>` : ''}
-    </div>`;
-
-    html += '<div class="chips-scroll">';
-    route.waypoints.forEach((w,i) => {
-      const done = progress.visited.includes(w.id);
-      const current = i === nIdx;
-      html += `<div class="step-chip ${done?'done':''} ${current?'current':''}">
-        <div class="step-chip-icon">${done?'✅':'📍'}</div>
-        <div class="step-chip-name">${waypointLabel(i)}</div>
-        <div class="step-chip-xp">+${TYPE_XP[w.type]||10} XP</div>
-      </div>`;
-    });
-    html += '</div>';
-
-    html += `<button class="fallback-btn" id="fallbackBtn">GPS zickt rum? Hier manuell bestätigen 👀</button>`;
-
-    els.main.innerHTML = html;
-    document.getElementById('fallbackBtn').onclick = () => {
-      if(confirm('Wegpunkt "'+target.name+'" wirklich manuell bestätigen?')) triggerWaypoint(target);
-    };
-    document.getElementById('navStartBtn').onclick = () => {
-      if(!navModeActive){
-        // Start gilt ab jetzt als erreicht — dort, wo das Navi mich gerade findet.
-        // Kein GPS-Abgleich mit der ursprünglich aufgenommenen Startposition nötig.
-        const startWp = route.waypoints.find(w => w.type === 'start');
-        if(startWp && !progress.visited.includes(startWp.id)){
-          progress.visited.push(startWp.id);
-          progress.xp += (TYPE_XP[startWp.type] || 10);
-          if(!progress.startedAt) progress.startedAt = Date.now();
-          saveProgress();
-          updateHUD();
-          renderWpMarkers();
-        }
-        enterNavMode();
-      } else {
-        exitNavMode();
-      }
-    };
-    const cancelBtn = document.getElementById('cancelRouteBtn');
-    if(cancelBtn) cancelBtn.onclick = () => {
-      if(!confirm('Route wirklich abbrechen? Dein Fortschritt auf dieser Route wird zurückgesetzt.')) return;
-      progress = { visited: [], startedAt: null, xp: 0 };
-      saveProgress();
-      if(navModeActive) exitNavMode();
-      renderWpMarkers();
-      render();
-      toast('Route abgebrochen — Fortschritt zurückgesetzt');
-    };
-    updateDistanceDisplay(target);
-  }
-
-  function renderRecordingView(){
-    const editing = !!routeLibrary[recordingRouteId];
-    const num = recording.length;
-    let html = `<div class="quest-card">
-      <div class="quest-eyebrow">${editing ? '✏️ Route bearbeiten' : (planningMode ? '🗺️ Route auf Karte planen' : '🆕 Neue Route (laufen)')}</div>
-      <div class="quest-name" style="font-size:18px; margin-top:2px;"><b>${esc(recordingRouteName)}</b></div>
-      <div class="row-sub" style="margin-top:6px;">${num} Punkt${num===1?'':'e'} markiert${recordingTrack.length ? ' · ' + recordingTrack.length + ' Spurpunkte' : ''}</div>
-      ${planningMode
-        ? `<div class="row-sub" style="margin-top:14px; text-align:center; padding:14px; background:var(--bg-elevated); border-radius:14px; border:1px dashed var(--border);">👆 Tippe auf die Karte, um ${num===0?'den Startpunkt':'den nächsten Punkt'} zu setzen</div>`
-        : `<button class="btn btn-primary" id="mainMarkBtn" style="width:100%; margin-top:14px; font-size:16.5px; padding:17px;">📍 Markierung setzen</button>`}
-      ${num > 0 ? `<button class="fallback-btn" id="mainUndoBtn" style="margin-top:10px;">↩️ Letzten Punkt entfernen</button>` : ''}
-    </div>`;
-
-    if(num > 0){
-      html += '<div class="chips-scroll">';
-      recording.forEach((w) => {
-        html += `<div class="step-chip done">
-          <div class="step-chip-icon">${TYPE_EMOJI[w.type]||'📍'}</div>
-          <div class="step-chip-name">${esc(w.name)}</div>
-        </div>`;
-      });
-      html += '</div>';
-    }
-
-    html += `<button class="btn-block accent" id="mainSaveRouteBtn" ${num===0?'style="opacity:.4; pointer-events:none;"':''}>✅ Route speichern${num?' ('+num+' Punkte)':''}</button>`;
-    html += `<button class="fallback-btn" id="mainSettingsBtn" style="margin-top:10px;">⚙️ Punkte bearbeiten / Einstellungen</button>`;
-
-    els.main.innerHTML = html;
-    if(!planningMode) document.getElementById('mainMarkBtn').onclick = doMarkHere;
-    const undoBtn = document.getElementById('mainUndoBtn');
-    if(undoBtn) undoBtn.onclick = undoLastPoint;
-    if(num > 0) document.getElementById('mainSaveRouteBtn').onclick = doFinishRecording;
-    document.getElementById('mainSettingsBtn').onclick = () => {
-      buildRecordList(); buildRouteLibraryUI();
-      drawerEl.classList.add('open');
-    };
-  }
-
-  function updateDistanceDisplay(target){
-    const el = document.getElementById('distReadout');
-    if(!el || !window.__lastPos) return;
-    const d = haversine(window.__lastPos.lat, window.__lastPos.lng, target.lat, target.lng);
-    const f = fmtDist(d);
-    el.innerHTML = f.val + '<span>' + f.unit + '</span>';
-  }
-
-  function renderEmptyState(){
-    els.main.innerHTML = `<div class="finish">
-      <div class="finish-mascot">🗺️</div>
-      <div class="finish-eyebrow">Noch keine Route</div>
-      <div class="finish-title" style="font-size:20px;">Leg deine erste Route an</div>
-      <div class="row-sub" style="text-align:center; margin:10px 0 22px;">Lauf eine Strecke ab oder plane sie direkt auf der Karte — beides geht in den Einstellungen unter "Meine Routen".</div>
-      <button class="btn btn-primary" id="emptyStateSettingsBtn" style="width:100%;">⚙️ Einstellungen öffnen</button>
-    </div>`;
-    document.getElementById('emptyStateSettingsBtn').onclick = () => {
-      buildRecordList(); buildRouteLibraryUI();
-      drawerEl.classList.add('open');
-    };
-  }
-
-  function renderFinish(){
-    const elapsed = progress.startedAt ? Math.round((Date.now()-progress.startedAt)/60000) : 0;
-    const rank = rankFor(progress.xp);
-    els.main.innerHTML = `<div class="finish">
-      <div class="finish-mascot">${rank.emoji}</div>
-      <div class="finish-eyebrow">Mission abgeschlossen</div>
-      <div class="finish-title">Zurück auf der Erde! 🏁</div>
-      <div class="finish-rank">Rang erreicht: ${rank.name}</div>
-      <div class="stats">
-        <div class="stat"><div class="stat-val">${route.waypoints.length}</div><div class="stat-label">Stationen</div></div>
-        <div class="stat"><div class="stat-val">${progress.xp}</div><div class="stat-label">XP gesammelt</div></div>
-        <div class="stat"><div class="stat-val">${elapsed}</div><div class="stat-label">Minuten</div></div>
-        <div class="stat"><div class="stat-val">35€</div><div class="stat-label">Für den Mars</div></div>
-      </div>
-      <div class="row-sub" style="margin-bottom:12px; text-align:center;">Dieser Stand ist gespeichert und bleibt auch nach Schließen der App so — "Neue Runde starten" setzt ihn absichtlich zurück.</div>
-      <button class="btn btn-primary" style="width:100%;" id="restartBtn">Neue Runde starten</button>
-    </div>`;
-    document.getElementById('restartBtn').onclick = () => {
-      if(!confirm('Fortschritt wirklich zurücksetzen und von vorne starten?')) return;
-      progress = { visited: [], startedAt: Date.now(), xp: 0 };
-      saveProgress(); render();
-    };
-  }
-
-
-  function esc(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
-  /* ---------------- Waypoint trigger ---------------- */
-  let overlayOpen = false;
-  let overlayAutoCloseTimer = null;
-
-  function triggerWaypoint(wp){
-    if(overlayOpen) return;
-    if(progress.visited.includes(wp.id)) return;
-    if(!progress.startedAt) progress.startedAt = Date.now();
-    progress.visited.push(wp.id);
-    const xpGain = TYPE_XP[wp.type] || 10;
-    progress.xp += xpGain;
-    saveProgress();
-    updateHUD();
-    renderWpMarkers();
-
-    if(wp.type === 'start'){
-      // Kein Feier-Fenster am Start — direkt weiter zum nächsten Punkt navigieren
-      render();
-      return;
-    }
-
-    drawerEl.classList.remove('open');
-    overlayOpen = true;
-    vibrate(wp.type);
-    if(soundOn) playChime();
-    burstConfetti();
-
-    const hasAction = !!wp.hypershellAction;
-    const hasFact = !!wp.funfact;
-    const rank = rankFor(progress.xp);
-
-    els.card.innerHTML = `
-      <div class="mascot-bubble">
-        <div class="mascot-face">${rank.emoji}</div>
-        <div class="bubble">${MASCOT_LINES[wp.type]||''}${(() => { const idx = route.waypoints.findIndex(x=>x.id===wp.id); const l = waypointLabel(idx); return l==='Start' ? 'Start' : ('Punkt ' + l); })()}</div>
-      </div>
-      <div class="xp-pop">✨ +${xpGain} XP</div>
-      <div class="card-title">${esc(wp.instruction)}</div>
-      ${hasAction ? `<div class="action-box"><div class="action-box-icon">⚡</div><div class="action-box-text">${esc(wp.hypershellAction)}</div></div>` : ''}
-      ${hasFact ? `<div class="funfact"><div class="funfact-label">💡 Fun Fact</div>${esc(wp.funfact)}</div>` : ''}
-      <div class="card-actions">
-        <button class="btn-ghost" id="cardReplay" style="flex:1;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> Nochmal vorlesen</button>
-      </div>`;
-
-    els.overlay.classList.add('show');
-    const fullText = wp.instruction + (hasFact ? '. ' + wp.funfact : '');
-    document.getElementById('cardReplay').onclick = (e) => { e.stopPropagation(); scheduleOverlayAutoClose(fullText); };
-    els.overlay.onclick = (e) => { if(e.target === els.overlay) closeOverlay(); };
-    scheduleOverlayAutoClose(fullText);
-  }
-
-  function scheduleOverlayAutoClose(text){
-    if(overlayAutoCloseTimer) clearTimeout(overlayAutoCloseTimer);
-    // Grobe Sicherheits-Zeit, falls die Sprachausgabe fehlschlägt oder deaktiviert ist
-    // (dann bleibt genug Zeit zum Lesen statt sich an der Sprechgeschwindigkeit zu orientieren)
-    const wordCount = (text||'').split(/\s+/).filter(Boolean).length;
-    const fallbackMs = Math.max(4500, wordCount * 480) + 4000;
-    overlayAutoCloseTimer = setTimeout(closeOverlay, fallbackMs);
-
-    if(voiceOn && 'speechSynthesis' in window && text){
-      speak(text, () => {
-        // Ansage ist wirklich zu Ende — jetzt erst kurz warten und schließen
-        if(overlayAutoCloseTimer) clearTimeout(overlayAutoCloseTimer);
-        overlayAutoCloseTimer = setTimeout(closeOverlay, 1000);
-      });
-    }
-  }
-
-  function closeOverlay(){
-    if(overlayAutoCloseTimer){ clearTimeout(overlayAutoCloseTimer); overlayAutoCloseTimer = null; }
-    els.overlay.classList.remove('show');
-    overlayOpen = false;
-    speechSynthesis.cancel();
-    render();
-    if(map) setTimeout(() => map.invalidateSize(), 100);
-  }
-
-  function vibrate(type){
-    if(!navigator.vibrate) return;
-    if(type==='mode') navigator.vibrate([80,60,80]);
-    else if(type==='finish') navigator.vibrate([100,50,100,50,200]);
-    else navigator.vibrate(80);
-  }
-
-  /* ---------------- Sound chime (synth, kein Audiofile nötig) ---------------- */
-  let actx = null;
-  function playChime(){
-    try{
-      if(!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
-      const notes = [880, 1175];
-      notes.forEach((f,i) => {
-        const o = actx.createOscillator(), g = actx.createGain();
-        o.type = 'sine'; o.frequency.value = f;
-        o.connect(g); g.connect(actx.destination);
-        const t0 = actx.currentTime + i*0.09;
-        g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(0.15, t0+0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0+0.35);
-        o.start(t0); o.stop(t0+0.4);
-      });
-    }catch(e){}
-  }
-
-  /* ---------------- Confetti (vanilla canvas) ---------------- */
-  const confettiCanvas = document.getElementById('confettiCanvas');
-  const cctx = confettiCanvas.getContext('2d');
-  function resizeConfetti(){ confettiCanvas.width = innerWidth; confettiCanvas.height = innerHeight; }
-  window.addEventListener('resize', resizeConfetti); resizeConfetti();
-  function burstConfetti(){
-    const colors = ['#d9a53f','#f0be5c','#6fd9a8','#ff8f66','#6fb3d9'];
-    const N = 60;
-    const particles = Array.from({length:N}, () => ({
-      x: confettiCanvas.width/2 + (Math.random()-0.5)*80,
-      y: confettiCanvas.height*0.35,
-      vx: (Math.random()-0.5)*9,
-      vy: -Math.random()*7-3,
-      size: Math.random()*6+4,
-      color: colors[Math.floor(Math.random()*colors.length)],
-      rot: Math.random()*Math.PI*2,
-      vr: (Math.random()-0.5)*0.3,
-      life: 0
-    }));
-    let frame = 0;
-    function tick(){
-      frame++;
-      cctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
-      let alive = false;
-      particles.forEach(p => {
-        p.vy += 0.22; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life++;
-        if(p.y < confettiCanvas.height+20) alive = true;
-        cctx.save();
-        cctx.translate(p.x,p.y); cctx.rotate(p.rot);
-        cctx.fillStyle = p.color;
-        cctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
-        cctx.restore();
-      });
-      if(alive && frame < 140) requestAnimationFrame(tick);
-      else cctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
-    }
-    tick();
-  }
-
-  /* ---------------- Text-to-Speech ---------------- */
-  function loadVoices(){
-    voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('de'));
-    const sel = document.getElementById('voiceSelect');
-    sel.innerHTML = voices.map(v => `<option value="${v.voiceURI}">${v.name}</option>`).join('');
-    if(selectedVoiceURI) sel.value = selectedVoiceURI;
-  }
-  if('speechSynthesis' in window){ speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); }
-  function speak(text, onEnd){
-    if(!voiceOn || !('speechSynthesis' in window) || !text){ if(onEnd) onEnd(); return; }
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'de-DE';
-    const v = voices.find(v => v.voiceURI === selectedVoiceURI);
-    if(v) u.voice = v;
-    u.rate = 0.98;
-    if(onEnd){ u.onend = onEnd; u.onerror = onEnd; }
-    speechSynthesis.speak(u);
-  }
-
-  /* ---------------- GPS: live ---------------- */
-  let initialLocateDone = false;
-  function checkProximity(lat,lng){
-    window.__lastPos = { lat, lng };
-    updateMeMarker(lat,lng);
-    if(!initialLocateDone && map){
-      initialLocateDone = true;
-      programmaticMove = true;
-      map.setView([lat,lng], 16);
-      setTimeout(() => programmaticMove = false, 300);
-    }
-    if(navModeActive && autoFollow && map){
-      programmaticMove = true;
-      map.setView([lat,lng], map.getZoom() < 16 ? 17 : map.getZoom(), { animate:true });
-      setTimeout(() => programmaticMove = false, 300);
-    }
-
-    const nIdx = nextUnvisitedIndex();
-    if(nIdx === -1) return;
-    updateDistanceDisplay(route.waypoints[nIdx]);
-
-    // Nicht nur den direkt nächsten Punkt prüfen, sondern auch spätere unerreichte
-    // Punkte — falls einer davon erreicht ist, gelten übersprungene Punkte
-    // automatisch als abgehakt (kein Zwang, jeden Punkt exakt zu treffen).
-    let hitIndex = -1;
-    for(let i = nIdx; i < route.waypoints.length; i++){
-      const w = route.waypoints[i];
-      if(progress.visited.includes(w.id)) continue;
-      const d = haversine(lat, lng, w.lat, w.lng);
-      const r = w.radius || defaultRadius;
-      if(d <= r){ hitIndex = i; break; }
-    }
-    if(hitIndex === -1) return;
-
-    if(hitIndex > nIdx){
-      for(let i = nIdx; i < hitIndex; i++){
-        const skipped = route.waypoints[i];
-        if(!progress.visited.includes(skipped.id)) progress.visited.push(skipped.id);
-      }
-      saveProgress(); updateHUD(); renderWpMarkers();
-    }
-    triggerWaypoint(route.waypoints[hitIndex]);
-  }
-
-  function startLiveGPS(){
-    if(!('geolocation' in navigator)){ toast('Kein GPS auf diesem Gerät verfügbar'); return; }
-    els.gpsLabel.textContent = 'GPS';
-    watchId = navigator.geolocation.watchPosition(
-      pos => { els.gpsDot.className = 'gps-dot live'; checkProximity(pos.coords.latitude, pos.coords.longitude); },
-      err => { toast('GPS-Fehler: ' + err.message); },
-      { enableHighAccuracy:true, maximumAge:2000, timeout:15000 }
-    );
-  }
-  function stopLiveGPS(){ if(watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; } }
-
-  /* ---------------- Settings drawer wiring ---------------- */
-  const drawerEl = document.getElementById('drawer');
-  document.getElementById('settingsBtn').onclick = async () => {
-    document.getElementById('routeJson').value = route.id === '__empty__' ? '' : JSON.stringify(route, null, 2);
-    document.getElementById('radiusInput').value = defaultRadius;
-    document.getElementById('voiceSwitch').classList.toggle('on', voiceOn);
-    document.getElementById('soundSwitch').classList.toggle('on', soundOn);
-    buildRecordList();
-    buildRouteLibraryUI();
-    const total = await countTiles();
-    document.getElementById('tileStatus').textContent = total > 0
-      ? '✅ ' + total + ' Kacheln bereits offline gespeichert'
-      : 'Noch keine Offline-Kacheln gespeichert.';
-    document.getElementById('statusLine').textContent = route.id === '__empty__'
-      ? 'Noch keine Route aktiv.'
-      : 'Route: ' + route.id + ' · Besucht: ' + progress.visited.length + '/' + route.waypoints.length + ' · XP: ' + progress.xp;
-    drawerEl.classList.add('open');
-  };
-  document.getElementById('closeDrawer').onclick = () => { drawerEl.classList.remove('open'); if(map) setTimeout(() => map.invalidateSize(), 100); };
-  document.getElementById('downloadTiles').onclick = downloadOfflineTiles;
-  document.getElementById('clearTiles').onclick = clearAllTiles;
-
-  function doMarkHere(){
-    if(!recordingRouteId){ toast('Bitte zuerst oben "Neue Route erstellen" oder eine Route zum Bearbeiten öffnen'); return; }
-    const pos = window.__recPos || window.__lastPos
-      || (map ? { lat: map.getCenter().lat, lng: map.getCenter().lng } : { lat: route.waypoints[0].lat, lng: route.waypoints[0].lng });
-    const isStart = recording.length === 0;
-    const label = String(recording.length).padStart(2,'0'); // zählt Start nicht mit
-    const entry = {
-      id: 'wp_'+Date.now(),
-      name: isStart ? 'Start' : ('Punkt ' + label),
-      type: isStart ? 'start' : 'checkpoint',
-      instruction: isStart ? 'Start der Tour.' : ('Dies ist Punkt ' + label + '.'),
-      hypershellAction: '',
-      funfact: '',
-      radius: defaultRadius,
-      lat: pos.lat, lng: pos.lng
-    };
-    recording.push(entry);
-    saveRecordingState();
-    buildRecordList();
-    if(navigator.vibrate) navigator.vibrate(60);
-    if(soundOn) playChime();
-    toast(isStart ? '🚀 Startpunkt markiert' : ('📍 Punkt ' + label + ' markiert · Details kannst du später bearbeiten'));
-  }
-  document.getElementById('markHereBtn').onclick = doMarkHere;
-
-  document.getElementById('newRouteBtn').onclick = () => {
-    const suggested = 'Route ' + (Object.keys(routeLibrary).length + 1).toString().padStart(2,'0');
-    const name = prompt('Name der neuen Route:', suggested);
-    if(!name) return;
-    if(recording.length > 0 && !confirm('Es gibt noch eine offene Aufnahme ("'+(recordingRouteName||'unbenannt')+'", '+recording.length+' Punkte). Verwerfen und neue Route starten?')) return;
-    detachPlanningClick();
-    recording = [];
-    recordingTrack = [];
-    recordingSegLens = [];
-    planningMode = false;
-    recordingRouteId = 'route-'+Date.now();
-    recordingRouteName = name;
-    saveRecordingState();
-    buildRecordList();
-    buildRouteLibraryUI();
-    startTrackRecording();
-    drawerEl.classList.remove('open');
-    toast('Aufzeichnung läuft — lauf los, dann "Markierung setzen" antippen');
-  };
-
-  document.getElementById('planRouteBtn').onclick = () => {
-    const suggested = 'Route ' + (Object.keys(routeLibrary).length + 1).toString().padStart(2,'0');
-    const name = prompt('Name der neuen Route:', suggested);
-    if(!name) return;
-    if(recording.length > 0 && !confirm('Es gibt noch eine offene Aufnahme ("'+(recordingRouteName||'unbenannt')+'", '+recording.length+' Punkte). Verwerfen und neue Route starten?')) return;
-    stopTrackRecording();
-    recording = [];
-    recordingTrack = [];
-    recordingSegLens = [];
-    planningMode = true;
-    recordingRouteId = 'route-'+Date.now();
-    recordingRouteName = name;
-    saveRecordingState();
-    buildRecordList();
-    buildRouteLibraryUI();
-    attachPlanningClick();
-    drawerEl.classList.remove('open');
-    toast('Tippe auf die Karte, um den Startpunkt zu setzen');
-  };
-
-  function doFinishRecording(){
-    if(recording.length === 0) return;
-    const finalName = recordingRouteName || prompt('Name für diese Route:', 'Meine Route') || 'Meine Route';
-    const finalId = recordingRouteId || ('route-'+Date.now());
-    const routeObj = { id: finalId, name: finalName, waypoints: recording.map(w => ({...w})), track: recordingTrack.map(p=>[p[0],p[1]]), updatedAt: Date.now() };
-    routeLibrary[finalId] = routeObj;
-    saveRouteLibrary();
-    stopTrackRecording();
-    detachPlanningClick();
-    clearPlanningMarkers();
-    recording = [];
-    recordingTrack = [];
-    recordingSegLens = [];
-    planningMode = false;
-    recordingRouteId = null;
-    recordingRouteName = '';
-    saveRecordingState();
-    activateRoute(finalId);
-    buildRecordList();
-    buildRouteLibraryUI();
-    document.getElementById('routeJson').value = JSON.stringify(route, null, 2);
-    toast('Route "'+finalName+'" gespeichert · '+routeObj.waypoints.length+' Punkte, '+routeObj.track.length+' Spurpunkte 🎉');
-  }
-  document.getElementById('finishRecording').onclick = doFinishRecording;
-
-  document.getElementById('clearRecording').onclick = () => {
-    if(!confirm('Aufnahme wirklich verwerfen? Alle markierten Punkte und die Spur gehen verloren.')) return;
-    stopTrackRecording();
-    detachPlanningClick();
-    clearPlanningMarkers();
-    recording = [];
-    recordingTrack = [];
-    recordingSegLens = [];
-    planningMode = false;
-    recordingRouteId = null;
-    recordingRouteName = '';
-    saveRecordingState();
-    buildRecordList();
-    buildRouteLibraryUI();
-  };
-
-  document.getElementById('voiceSwitch').onclick = function(){ voiceOn = !voiceOn; localStorage.setItem('exotrail_voiceon', voiceOn?'1':'0'); this.classList.toggle('on', voiceOn); };
-  document.getElementById('soundSwitch').onclick = function(){ soundOn = !soundOn; localStorage.setItem('exotrail_soundon', soundOn?'1':'0'); this.classList.toggle('on', soundOn); };
-  document.getElementById('voiceSelect').onchange = function(){ selectedVoiceURI = this.value; localStorage.setItem('exotrail_voice', selectedVoiceURI); };
-  document.getElementById('radiusInput').onchange = function(){ defaultRadius = parseInt(this.value) || 30; localStorage.setItem('exotrail_radius', defaultRadius); };
-
-  document.getElementById('applyRoute').onclick = function(){
-    try{
-      const parsed = JSON.parse(document.getElementById('routeJson').value);
-      if(!parsed.waypoints || !parsed.id) throw new Error('Route braucht "id" und "waypoints"');
-      routeLibrary[parsed.id] = { ...parsed, updatedAt: Date.now() };
-      saveRouteLibrary();
-      activateRoute(parsed.id);
-      toast('Route übernommen');
-    }catch(e){ toast('Fehler im JSON: ' + e.message); }
-  };
-
-  /* ---------------- Route-Aufnahme (Recorder) ---------------- */
-  /* ---------------- Kartenplanung: Wege statt Luftlinie ---------------- */
-  async function fetchFootPath(a, b){
-    try{
-      const url = 'https://routing.openstreetmap.de/routed-foot/route/v1/foot/'
-        + a.lng + ',' + a.lat + ';' + b.lng + ',' + b.lat + '?overview=full&geometries=geojson';
-      const res = await fetch(url);
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if(data.code !== 'Ok' || !data.routes || !data.routes[0]) throw new Error('keine Route gefunden');
-      return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]); // GeoJSON ist [lng,lat] -> Leaflet [lat,lng]
-    }catch(e){
-      toast('⚠️ Wege-Routing nicht verfügbar — gerade Linie verwendet');
-      return [[a.lat,a.lng],[b.lat,b.lng]];
-    }
-  }
-
-  function mapPlanningClickListener(e){
-    if(!recordingRouteId || !planningMode) return;
-    doPlanPoint(e.latlng);
-  }
-  function attachPlanningClick(){ if(map){ map.off('click', mapPlanningClickListener); map.on('click', mapPlanningClickListener); } }
-  function detachPlanningClick(){ if(map) map.off('click', mapPlanningClickListener); }
-
-  async function doPlanPoint(latlng){
-    // Schutz: nochmaliges Tippen auf (fast) denselben Fleck soll nichts anrichten,
-    // nicht versehentlich einen Punkt duplizieren oder Verwirrung stiften.
-    if(recording.length > 0){
-      const last = recording[recording.length - 1];
-      if(haversine(last.lat, last.lng, latlng.lat, latlng.lng) < 6){
-        toast('Das ist bereits dein letzter Punkt — tippe woanders für den nächsten');
-        return;
-      }
-    }
-
-    const isStart = recording.length === 0;
-    const label = String(recording.length).padStart(2,'0');
-    const entry = {
-      id: 'wp_'+Date.now(),
-      name: isStart ? 'Start' : ('Punkt ' + label),
-      type: isStart ? 'start' : 'checkpoint',
-      instruction: isStart ? 'Start der Tour.' : ('Dies ist Punkt ' + label + '.'),
-      hypershellAction: '', funfact: '', radius: defaultRadius,
-      lat: latlng.lat, lng: latlng.lng
-    };
-
-    if(isStart){
-      recording.push(entry);
-      recordingTrack = [[latlng.lat, latlng.lng]];
-      recordingSegLens = [];
-      saveRecordingState();
-      buildRecordList();
-      renderPlanningMarkers();
-      toast('🚀 Startpunkt gesetzt — tippe den nächsten Punkt');
-      return;
-    }
-
-    toast('🧭 Weg wird berechnet …');
-    const prev = recording[recording.length - 1];
-    const seg = await fetchFootPath({ lat: prev.lat, lng: prev.lng }, { lat: latlng.lat, lng: latlng.lng });
-    const toAppend = seg.length > 1 ? seg.slice(1) : seg;
-    recording.push(entry);
-    recordingTrack = recordingTrack.concat(toAppend);
-    recordingSegLens.push(toAppend.length);
-    saveRecordingState();
-    buildRecordList();
-    if(recordTrackLine) recordTrackLine.setLatLngs(recordingTrack);
-    renderPlanningMarkers();
-    toast('📍 Punkt ' + label + ' gesetzt');
-  }
-
-  function undoLastPoint(){
-    if(recording.length === 0) return;
-    recording.pop();
-    if(planningMode){
-      if(recordingSegLens.length > 0){
-        const n = recordingSegLens.pop();
-        recordingTrack.splice(recordingTrack.length - n, n);
-      } else {
-        recordingTrack = [];
-      }
-      if(recordTrackLine) recordTrackLine.setLatLngs(recordingTrack);
-    }
-    saveRecordingState();
-    buildRecordList();
-    renderPlanningMarkers();
-    toast('↩️ Letzten Punkt entfernt');
-  }
-
-  function renderPlanningMarkers(){
-    if(!map) return;
-    recordingMarkers.forEach(m => map.removeLayer(m));
-    recordingMarkers = [];
-    recording.forEach((w,i) => {
-      const isLast = i === recording.length - 1;
-      const label = i === 0 ? 'Start' : String(i).padStart(2,'0');
-      const icon = L.divIcon({
-        className:'', html: '<div class="wp-pin ' + (isLast?'current':'dim') + '">' + label + '</div>',
-        iconSize: isLast ? [44,44] : [24,24], iconAnchor: isLast ? [22,22] : [12,12]
-      });
-      recordingMarkers.push(L.marker([w.lat, w.lng], { icon }).addTo(map));
-    });
-  }
-  function clearPlanningMarkers(){
-    recordingMarkers.forEach(m => map && map.removeLayer(m));
-    recordingMarkers = [];
-  }
-
-  function startTrackRecording(){
-    if(trackWatchId !== null || !('geolocation' in navigator)) return;
-    trackWatchId = navigator.geolocation.watchPosition(
-      pos => {
-        const lat = pos.coords.latitude, lng = pos.coords.longitude;
-        window.__recPos = { lat, lng };
-        const last = recordingTrack[recordingTrack.length - 1];
-        if(!last || haversine(last[0], last[1], lat, lng) >= 6){
-          recordingTrack.push([lat, lng]);
-          saveRecordingState();
-          if(recordTrackLine) recordTrackLine.setLatLngs(recordingTrack);
-        }
-      },
-      err => {},
-      { enableHighAccuracy:true, maximumAge:2000, timeout:15000 }
-    );
-  }
-  function stopTrackRecording(){
-    if(trackWatchId !== null){ navigator.geolocation.clearWatch(trackWatchId); trackWatchId = null; }
-    if(recordTrackLine) recordTrackLine.setLatLngs([]);
-  }
-
-  function getCurrentPositionAsync(){
-    return new Promise((resolve,reject) => {
-      if(!('geolocation' in navigator)) return reject(new Error('Kein GPS verfügbar'));
-      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
-    });
-  }
-
-  function buildRecordList(){
-    const wrap = document.getElementById('recordList');
-    const actionsWrap = document.getElementById('recordActionsWrap');
-    const statusEl = document.getElementById('recordingStatus');
-    const markBtn = document.getElementById('markHereBtn');
-    if(!wrap) return;
-
-    if(statusEl){
-      if(recordingRouteId){
-        const known = routeLibrary[recordingRouteId];
-        statusEl.innerHTML = (known ? '✏️ Du bearbeitest: ' : '🆕 Neue Route: ') + '<b style="color:var(--text);">' + esc(recordingRouteName) + '</b>' + (recording.length ? ' · ' + recording.length + ' Punkte' : '');
-      } else {
-        statusEl.textContent = 'Wähle oben "Neue Route erstellen" oder bearbeite eine bestehende Route.';
-      }
-    }
-    if(markBtn) markBtn.style.opacity = recordingRouteId ? '1' : '.5';
-
-    wrap.innerHTML = recording.map((w,i) => `
-      <div class="rec-item" data-idx="${i}">
-        <div class="rec-item-top"><span class="rec-emoji">${TYPE_EMOJI[w.type]||'📍'}</span><span class="rec-name">${i+1}. ${esc(w.name)}</span></div>
-        <div class="rec-coords">${w.lat.toFixed(5)}, ${w.lng.toFixed(5)} · ${TYPE_LABEL[w.type]||''} · ${w.radius||defaultRadius}m Radius</div>
-        <div class="rec-actions">
-          <button data-act="up">↑</button>
-          <button data-act="down">↓</button>
-          <button data-act="edit">✏️ Bearbeiten</button>
-          <button data-act="del">🗑️</button>
-        </div>
-      </div>`).join('');
-    if(actionsWrap) actionsWrap.style.display = recording.length ? 'flex' : 'none';
-
-    wrap.querySelectorAll('.rec-item').forEach(item => {
-      const i = parseInt(item.dataset.idx);
-      item.querySelector('[data-act="up"]').onclick = () => { if(i>0){ [recording[i-1],recording[i]]=[recording[i],recording[i-1]]; saveRecordingState(); buildRecordList(); } };
-      item.querySelector('[data-act="down"]').onclick = () => { if(i<recording.length-1){ [recording[i+1],recording[i]]=[recording[i],recording[i+1]]; saveRecordingState(); buildRecordList(); } };
-      item.querySelector('[data-act="edit"]').onclick = () => openRecordForm({ lat:recording[i].lat, lng:recording[i].lng }, i);
-      item.querySelector('[data-act="del"]').onclick = () => { if(confirm('Punkt "'+recording[i].name+'" löschen?')){ recording.splice(i,1); saveRecordingState(); buildRecordList(); } };
-    });
-
-    if(recordingRouteId) renderRecordingView(); else render();
-  }
-
-  function openRecordForm(posData, existingIndex){
-    editingRecordIndex = (existingIndex === undefined) ? null : existingIndex;
-    const w = editingRecordIndex !== null ? recording[editingRecordIndex] : {
-      name:'', type:'checkpoint', instruction:'', hypershellAction:'', funfact:'',
-      radius: defaultRadius, lat: posData.lat, lng: posData.lng
-    };
-    const statusText = posData.pending ? '📡 GPS wird ermittelt … du kannst schon lostippen'
-      : posData.error ? '⚠️ Keine GPS-Position gefunden — bitte Koordinaten prüfen/eingeben'
-      : posData.accuracy ? '✅ GPS-Position · ' + Math.round(posData.accuracy) + 'm genau'
-      : '📍 Position gesetzt';
-
-    document.getElementById('recordCard').innerHTML = `
-      <div class="card-title" style="font-size:19px; margin-bottom:6px;">${editingRecordIndex!==null?'Punkt bearbeiten':'Neuer Punkt'}</div>
-      <div class="card-eyebrow" id="rf_status" style="margin-bottom:14px;">${statusText}</div>
-
-      <div class="field"><label>Titel auf Karte</label><input id="rf_name" type="text" placeholder="z.B. Startpunkt" value="${esc(w.name)}"></div>
-
-      <div class="field"><label>Typ</label>
-        <select id="rf_type">
-          ${Object.keys(TYPE_EMOJI).map(t => `<option value="${t}" ${w.type===t?'selected':''}>${TYPE_EMOJI[t]} ${TYPE_LABEL[t]}</option>`).join('')}
-        </select>
-      </div>
-
-      <div class="field"><label>Sprachnachricht (wird vorgelesen)</label><textarea id="rf_instruction" style="min-height:80px;" placeholder="z.B. Hier geht's los, starte im Eco-Modus.">${esc(w.instruction)}</textarea></div>
-
-      <div class="field"><label>Hypershell-Aktion (optional)</label><input id="rf_action" type="text" placeholder="z.B. Bergmodus → 50% Power" value="${esc(w.hypershellAction)}"></div>
-
-      <div class="field"><label>Fun Fact (optional)</label><textarea id="rf_funfact" style="min-height:60px;" placeholder="Wissenswertes zu diesem Ort">${esc(w.funfact)}</textarea></div>
-
-      <div style="display:flex; gap:10px;">
-        <div class="field" style="flex:1;"><label>Breitengrad</label><input id="rf_lat" type="number" step="0.00001" value="${w.lat}"></div>
-        <div class="field" style="flex:1;"><label>Längengrad</label><input id="rf_lng" type="number" step="0.00001" value="${w.lng}"></div>
-      </div>
-      <div class="field"><label>Trigger-Radius (Meter)</label><input id="rf_radius" type="number" min="5" max="200" value="${w.radius||defaultRadius}"></div>
-
-      <div class="card-actions">
-        <button class="btn btn-primary" id="rf_save">Speichern</button>
-        <button class="btn-ghost" id="rf_recheck" title="Position neu orten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
-      </div>
-      <button class="fallback-btn" id="rf_cancel" style="margin-top:10px;">Abbrechen</button>
-    `;
-
-    document.getElementById('recordOverlay').classList.add('show');
-    drawerEl.classList.remove('open');
-
-    if(posData.pending){
-      getCurrentPositionAsync().then(pos => {
-        const statusEl = document.getElementById('rf_status');
-        const latEl = document.getElementById('rf_lat'), lngEl = document.getElementById('rf_lng');
-        if(!statusEl || !latEl) return; // Formular inzwischen geschlossen
-        latEl.value = pos.coords.latitude;
-        lngEl.value = pos.coords.longitude;
-        statusEl.textContent = '✅ GPS-Position · ' + Math.round(pos.coords.accuracy) + 'm genau';
-      }).catch(err => {
-        const statusEl = document.getElementById('rf_status');
-        if(statusEl) statusEl.textContent = '⚠️ Keine GPS-Position (' + err.message + ') — bitte Koordinaten manuell prüfen';
-      });
-    }
-
-    document.getElementById('rf_recheck').onclick = async () => {
-      const statusEl = document.getElementById('rf_status');
-      const btn = document.getElementById('rf_recheck');
-      statusEl.textContent = '📡 GPS wird ermittelt …';
-      btn.disabled = true;
-      try{
-        const pos = await getCurrentPositionAsync();
-        document.getElementById('rf_lat').value = pos.coords.latitude;
-        document.getElementById('rf_lng').value = pos.coords.longitude;
-        statusEl.textContent = '✅ GPS-Position · ' + Math.round(pos.coords.accuracy) + 'm genau';
-        toast('Position aktualisiert');
-      }catch(e){ statusEl.textContent = '⚠️ Keine GPS-Position (' + e.message + ')'; }
-      btn.disabled = false;
-    };
-
-    document.getElementById('rf_cancel').onclick = closeRecordForm;
-
-    document.getElementById('rf_save').onclick = () => {
-      const name = document.getElementById('rf_name').value.trim();
-      if(!name){ toast('Bitte einen Titel eingeben'); return; }
-      const lat = parseFloat(document.getElementById('rf_lat').value);
-      const lng = parseFloat(document.getElementById('rf_lng').value);
-      if(isNaN(lat) || isNaN(lng)){ toast('Bitte gültige Koordinaten eingeben'); return; }
-      const entry = {
-        id: (editingRecordIndex !== null && recording[editingRecordIndex].id) ? recording[editingRecordIndex].id : 'wp_'+Date.now(),
-        name,
-        lat, lng,
-        radius: parseInt(document.getElementById('rf_radius').value) || defaultRadius,
-        type: document.getElementById('rf_type').value,
-        instruction: document.getElementById('rf_instruction').value.trim(),
-        hypershellAction: document.getElementById('rf_action').value.trim(),
-        funfact: document.getElementById('rf_funfact').value.trim()
-      };
-      if(editingRecordIndex !== null) recording[editingRecordIndex] = entry;
-      else recording.push(entry);
-      saveRecordingState();
-      buildRecordList();
-      closeRecordForm();
-      toast(editingRecordIndex !== null ? 'Punkt aktualisiert' : 'Punkt hinzugefügt · '+recording.length+' insgesamt');
-    };
-  }
-
-  function closeRecordForm(){
-    document.getElementById('recordOverlay').classList.remove('show');
-    editingRecordIndex = null;
-    drawerEl.classList.add('open');
-  }
-
-  /* ---------------- Wake lock ---------------- */
-  async function requestWakeLock(){ try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
-  document.addEventListener('visibilitychange', () => {
-    if(document.visibilityState === 'visible'){
-      requestWakeLock();
-      // GPS-Watcher nach Rückkehr aus dem Hintergrund/Sperrbildschirm neu starten,
-      // da mobile Browser sie beim Sperren oft stillschweigend beenden.
-      stopLiveGPS(); startLiveGPS();
-      if(recordingRouteId && !planningMode){ stopTrackRecording(); startTrackRecording(); }
-    }
+});
+map.on('idle', () => {
+  const feats = map.queryRenderedFeatures();
+  document.getElementById('statusBar').innerHTML =
+    '<b>Karte bereit</b> · sichtbare Objekte: ' + feats.length +
+    (tileErrorCount ? ' · ⚠️ ' + tileErrorCount + ' Fehler' : '');
+});
+map.on('error', (e) => {
+  tileErrorCount++;
+  const msg = (e && e.error && (e.error.message || JSON.stringify(e.error))) || JSON.stringify(e).slice(0,200);
+  document.getElementById('statusBar').innerHTML = '⚠️ <b>Kartenfehler (' + tileErrorCount + ')</b>: ' + esc(msg);
+  console.error('MapLibre error:', e);
+});
+
+function renderWpMarkers(){
+  wpMarkers.forEach(m => m.remove());
+  wpMarkers = [];
+  const nIdx = nextUnvisitedIndex();
+  route.waypoints.forEach((w,i) => {
+    const current = i === nIdx;
+    const label = waypointLabel(i);
+    const wrap = document.createElement('div');
+    wrap.className = 'wp-pin-wrap';
+    wrap.innerHTML =
+      (current ? '<div class="wp-pin-ring"></div>' : '') +
+      '<div class="wp-pin ' + (current ? 'current' : 'dim') + '">' + label + '</div>' +
+      (current ? '<div class="wp-tooltip-box">' + esc(w.name) + '</div>' : '');
+    const marker = new maplibregl.Marker({ element: wrap, anchor:'center' })
+      .setLngLat([w.lng, w.lat])
+      .addTo(map);
+    wpMarkers.push(marker);
   });
+}
 
-  /* ---------------- Init ---------------- */
-  document.getElementById('versionTag').textContent = 'v' + APP_VERSION;
-  openTileDb().then(db => { tileDb = db; initMap(); render(); }).catch(() => { initMap(); render(); });
-  requestWakeLock();
-  startLiveGPS();
-  if(recordingRouteId && !planningMode) startTrackRecording();
+function fitRoute(){
+  const lats = route.waypoints.map(w=>w.lat), lngs = route.waypoints.map(w=>w.lng);
+  const bounds = [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]];
+  map.fitBounds(bounds, { padding: 60, duration: 400 });
+}
 
-  setTimeout(() => {
-    const visited = progress.visited.length, total = route.waypoints.length;
-    if(visited === 0){
-      toast('ExoTrail v' + APP_VERSION + ' · "' + route.name + '" · Start');
-    } else if(visited < total){
-      toast('Weiter geht\'s: "' + route.name + '" · Punkt ' + (visited+1) + ' von ' + total + ' (gespeichert)');
-    } else {
-      toast('"' + route.name + '" bereits abgeschlossen · ' + progress.xp + ' XP gespeichert');
-    }
-  }, 400);
+function updateMeMarker(lat,lng){
+  if(!meMarker){
+    const wrap = document.createElement('div');
+    wrap.className = 'me-wrap';
+    wrap.innerHTML = '<div class="me-dot"></div><div class="me-arrow"></div>';
+    meMarker = new maplibregl.Marker({ element: wrap, anchor:'center' }).setLngLat([lng,lat]).addTo(map);
+  } else {
+    meMarker.setLngLat([lng,lat]);
+  }
+}
 
-})();
+async function locateMe(){
+  const btn = document.getElementById('locateBtn');
+  const original = btn.textContent;
+  btn.textContent = '⏳';
+  try{
+    const pos = await getCurrentPositionAsync();
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+    updateMeMarker(lat, lng);
+    map.flyTo({ center:[lng,lat], zoom:16, duration:600 });
+    const d = Math.round(haversine(lat, lng, route.waypoints[0].lat, route.waypoints[0].lng)/1000);
+    document.getElementById('statusBar').innerHTML = '<b>Du bist hier</b> · ' + d + ' km von Startpunkt entfernt';
+  }catch(e){
+    document.getElementById('statusBar').textContent = '⚠️ Standort nicht verfügbar: ' + e.message;
+  }
+  btn.textContent = original;
+}
+
+document.getElementById('centerBtn').onclick = fitRoute;
+document.getElementById('locateBtn').onclick = locateMe;
+document.getElementById('northBtn').onclick = () => map.easeTo({ bearing:0, pitch:0, duration:400 });
 </script>
 </body>
 </html>
